@@ -101,6 +101,23 @@ Nexus is a universal coding agent harness — a drop-in replacement for Claude C
 
 ### Completed (Phase 2 — Compression + Plugins)
 
+#### Desktop App (Phase 3 v1.1)
+- [x] Tauri v2 project scaffolded (Rust backend + React frontend)
+- [x] Rust backend: 9 Tauri commands, system tray, close-to-tray, global shortcuts
+- [x] React frontend: App shell with Tailwind CSS dark theme
+- [x] Sidebar — collapsible session tree with date grouping, status dots, quick actions
+- [x] ChatView — message list with streaming, markdown rendering, syntax-highlighted code blocks
+- [x] InputBar — auto-resizing textarea, Cmd+Enter send, cost estimate, model selector
+- [x] SessionView — 5-section details panel (info, model, cost breakdown, messages, actions)
+- [x] DiffViewer — side-by-side unified diff with scroll sync, syntax highlighting
+- [x] StatusBar — pulsing status, model, cost badge, clock
+- [x] SettingsModal — 3 tabs (General, Providers, About), API key management, test connection
+- [x] Toast notification system — 4 types, auto-dismiss, stackable
+- [x] Command palette (Cmd+K) — fuzzy search, keyboard navigable
+- [x] Keyboard shortcuts modal — all shortcuts grouped and documented
+- [x] nexus-sdk integration hook with Tauri IPC bridge
+- [x] Icon generation script (Python + ImageMagick fallback)
+
 #### Unit Testing (448 tests originally)
 - [x] nexus-ai: 77 tests — CircuitBreaker, CostTracker, RateLimiter, Provider, Registry, all 4 provider impls
 - [x] nexus-core: 151 tests — Error, Config, Tools, SessionManager, Approval, GitManager, AgentLoop
@@ -138,7 +155,8 @@ Nexus is a universal coding agent harness — a drop-in replacement for Claude C
 ### In Progress
 - [ ] Model download: Qwen 0.5B requires HuggingFace token (HF_TOKEN env var). Try: `HF_TOKEN=hf_xxx pnpm tsx scripts/download-model.ts`
 - [ ] Benchmark suite against Claude Code, Codex, Cursor baselines
-- [ ] Nexus v1.1 features: Desktop app (Tauri), IDE extensions
+- [x] Desktop app (Tauri v2) — scaffolded and built
+- [ ] IDE extensions (VS Code, JetBrains)
 
 ### Blocked
 - isolated-vm native compilation on Node 24 (needs C++20 toolchain) — uses fallback sandbox, works but less secure
@@ -155,6 +173,7 @@ Nexus is a universal coding agent harness — a drop-in replacement for Claude C
 | Ink + React for TUI | Familiar component model, rerender optimization |
 | yargs for CLI | Battle-tested, subcommand support, auto-help |
 | Vitest over Jest | ESM-native, faster, TypeScript-first |
+| Tauri v2 for desktop | ~6MB binary, Rust backend, web frontend, system tray, native notifications |
 | JSON sessions in .nexus/sessions/ | Portable, inspectable, git-ignored by default |
 | OpenRouter as default provider | 300+ models, free tier, single API key |
 
