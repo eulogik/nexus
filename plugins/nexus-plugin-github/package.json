@@ -1,0 +1,30 @@
+{
+  "name": "nexus-plugin-github",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
+  "nexus": {
+    "name": "nexus-plugin-github",
+    "version": "1.0.0",
+    "description": "GitHub integration — PRs, issues, code review",
+    "main": "./dist/index.js",
+    "permissions": ["network:fetch"],
+    "tools": [
+      { "name": "github_list_prs", "description": "List open pull requests", "parameters": { "type": "object", "properties": { "repo": { "type": "string", "description": "owner/repo format" }, "state": { "type": "string", "enum": ["open","closed","all"], "description": "PR state" } }, "required": ["repo"] } },
+      { "name": "github_get_pr", "description": "Get PR details", "parameters": { "type": "object", "properties": { "repo": { "type": "string" }, "pr": { "type": "number" } }, "required": ["repo","pr"] } },
+      { "name": "github_create_pr", "description": "Create a pull request", "parameters": { "type": "object", "properties": { "repo": { "type": "string" }, "title": { "type": "string" }, "body": { "type": "string" }, "head": { "type": "string" }, "base": { "type": "string" } }, "required": ["repo","title","head","base"] } },
+      { "name": "github_list_issues", "description": "List issues", "parameters": { "type": "object", "properties": { "repo": { "type": "string" }, "state": { "type": "string", "enum": ["open","closed","all"] } }, "required": ["repo"] } },
+      { "name": "github_create_issue", "description": "Create an issue", "parameters": { "type": "object", "properties": { "repo": { "type": "string" }, "title": { "type": "string" }, "body": { "type": "string" } }, "required": ["repo","title"] } },
+      { "name": "github_review_pr", "description": "Submit a PR review", "parameters": { "type": "object", "properties": { "repo": { "type": "string" }, "pr": { "type": "number" }, "body": { "type": "string" }, "event": { "type": "string", "enum": ["APPROVE","REQUEST_CHANGES","COMMENT"] } }, "required": ["repo","pr","event"] } }
+    ],
+    "commands": [
+      { "name": "gh", "description": "GitHub operations", "aliases": ["github"] }
+    ]
+  },
+  "scripts": { "build": "tsc", "dev": "tsc --watch", "clean": "rm -rf dist" },
+  "dependencies": {},
+  "devDependencies": { "@types/node": "^20.17.0", "typescript": "^5.7.0" }
+}

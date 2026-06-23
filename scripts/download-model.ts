@@ -5,16 +5,24 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 const MODEL_DIR = join(homedir(), '.nexus', 'models');
-const MODELS: Record<string, { url: string; size: string; description: string }> = {
+const MODELS: Record<string, { url: string; size: string; description: string; needsAuth?: boolean }> = {
   'qwen3.5-0.5b-instruct-q4_k_m': {
     url: 'https://huggingface.co/Qwen/Qwen3.5-0.5B-Instruct-GGUF/resolve/main/qwen3.5-0.5b-instruct-q4_k_m.gguf',
     size: '~300MB',
-    description: 'Default routing model (0.5B, Q4_K_M)',
+    description: 'Default routing model (0.5B, Q4_K_M) — requires HF_TOKEN',
+    needsAuth: true,
   },
   'qwen3.5-0.5b-instruct-q8_0': {
     url: 'https://huggingface.co/Qwen/Qwen3.5-0.5B-Instruct-GGUF/resolve/main/qwen3.5-0.5b-instruct-q8_0.gguf',
     size: '~500MB',
-    description: 'Higher quality routing model (0.5B, Q8_0)',
+    description: 'Higher quality routing model (0.5B, Q8_0) — requires HF_TOKEN',
+    needsAuth: true,
+  },
+  'smollm2-360m-instruct-q4_k_m': {
+    url: 'https://huggingface.co/microsoft/smollm2-360m-instruct-gguf/resolve/main/smollm2-360m-instruct-q4_k_m.gguf',
+    size: '~250MB',
+    description: 'Alternative routing model (360M, Q4_K_M) — MIT license, no auth required',
+    needsAuth: false,
   },
 };
 
@@ -48,10 +56,28 @@ async function main() {
 
   await mkdir(MODEL_DIR, { recursive: true });
 
-  const response = await fetch(model.url);
+  const headers: Record<string, string> = {};
+  const hfToken = process.env.HF_TOKEN || process.env.HUGGING_FACE_HUB_TOKEN || '';
+  if (hfToken) {
+    headers['Authorization'] = `Bearer ${hfToken}`;
+  } else if (model.needsAuth) {
+    console.error('\nThis model requires a HuggingFace access token.');
+    console.error('Set HF_TOKEN in your environment or use a model that doesn\'t require auth.');
+    console.error('  export HF_TOKEN=hf_your_token_here');
+    console.error('\nAlternative: download the auth-free model instead:');
+    console.error('  pnpm tsx scripts/download-model.ts smollm2-360m-instruct-q4_k_m');
+    process.exit(1);
+  }
+
+  const response = await fetch(model.url, { headers });
   if (!response.ok) {
     console.error(`Download failed: HTTP ${response.status} ${response.statusText}`);
-    console.error('Check the URL or your network connection.');
+    if (response.status === 401) {
+      console.error('\nAuthentication required. Set HF_TOKEN or HUGGING_FACE_HUB_TOKEN in your environment.');
+      console.error('  export HF_TOKEN=hf_your_token_here');
+      console.error('\nOr use a model that doesn\'t require authentication:');
+      console.error('  pnpm tsx scripts/download-model.ts smollm2-360m-instruct-q4_k_m');
+    }
     process.exit(1);
   }
 

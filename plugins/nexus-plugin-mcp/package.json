@@ -1,0 +1,28 @@
+{
+  "name": "nexus-plugin-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
+  "nexus": {
+    "name": "nexus-plugin-mcp",
+    "version": "1.0.0",
+    "description": "MCP server integration — connect to external MCP servers, list tools/resources",
+    "main": "./dist/index.js",
+    "permissions": ["network:fetch", "fs:read"],
+    "tools": [
+      { "name": "mcp_connect", "description": "Connect to an MCP server endpoint", "parameters": { "type": "object", "properties": { "url": { "type": "string", "description": "MCP server URL" }, "timeout": { "type": "number", "description": "Connection timeout ms" } }, "required": ["url"] } },
+      { "name": "mcp_list_tools", "description": "List available tools from connected MCP server", "parameters": { "type": "object", "properties": {}, "required": [] } },
+      { "name": "mcp_call_tool", "description": "Call a tool on the connected MCP server", "parameters": { "type": "object", "properties": { "tool": { "type": "string", "description": "Tool name" }, "args": { "type": "object", "description": "Tool arguments" } }, "required": ["tool"] } },
+      { "name": "mcp_disconnect", "description": "Disconnect from the MCP server", "parameters": { "type": "object", "properties": {}, "required": [] } }
+    ],
+    "commands": [
+      { "name": "mcp", "description": "MCP server management", "aliases": ["mcp-connect", "mcp-list", "mcp-call"] }
+    ]
+  },
+  "scripts": { "build": "tsc", "dev": "tsc --watch", "clean": "rm -rf dist" },
+  "dependencies": {},
+  "devDependencies": { "@types/node": "^20.17.0", "typescript": "^5.7.0" }
+}

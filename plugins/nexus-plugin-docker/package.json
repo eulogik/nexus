@@ -1,0 +1,30 @@
+{
+  "name": "nexus-plugin-docker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
+  "nexus": {
+    "name": "nexus-plugin-docker",
+    "version": "1.0.0",
+    "description": "Container management — build, run, manage Docker containers",
+    "main": "./dist/index.js",
+    "permissions": ["process:spawn"],
+    "tools": [
+      { "name": "docker_ps", "description": "List running containers", "parameters": { "type": "object", "properties": { "all": { "type": "boolean", "description": "Show all containers including stopped" } }, "required": [] } },
+      { "name": "docker_images", "description": "List Docker images", "parameters": { "type": "object", "properties": {}, "required": [] } },
+      { "name": "docker_run", "description": "Run a container from an image", "parameters": { "type": "object", "properties": { "image": { "type": "string", "description": "Docker image name" }, "name": { "type": "string", "description": "Container name" }, "ports": { "type": "string", "description": "Port mappings, e.g. 8080:80" }, "detach": { "type": "boolean", "description": "Run in background" }, "command": { "type": "string", "description": "Command to run" } }, "required": ["image"] } },
+      { "name": "docker_stop", "description": "Stop a running container", "parameters": { "type": "object", "properties": { "container": { "type": "string", "description": "Container ID or name" } }, "required": ["container"] } },
+      { "name": "docker_logs", "description": "View container logs", "parameters": { "type": "object", "properties": { "container": { "type": "string" }, "tail": { "type": "number", "description": "Number of lines to show" } }, "required": ["container"] } },
+      { "name": "docker_build", "description": "Build a Docker image from Dockerfile", "parameters": { "type": "object", "properties": { "path": { "type": "string", "description": "Path to Dockerfile directory" }, "tag": { "type": "string", "description": "Image tag" } }, "required": ["path","tag"] } }
+    ],
+    "commands": [
+      { "name": "docker", "description": "Docker operations", "aliases": ["container"] }
+    ]
+  },
+  "scripts": { "build": "tsc", "dev": "tsc --watch", "clean": "rm -rf dist" },
+  "dependencies": {},
+  "devDependencies": { "@types/node": "^20.17.0", "typescript": "^5.7.0" }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "nexus-plugin-git",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
+  "nexus": {
+    "name": "nexus-plugin-git",
+    "version": "1.0.0",
+    "description": "Git operations, auto-commit, branch management",
+    "main": "./dist/index.js",
+    "permissions": ["fs:read", "fs:write", "process:spawn", "git:read", "git:write"],
+    "tools": [
+      { "name": "git_status", "description": "Show working tree status", "parameters": { "type": "object", "properties": {}, "required": [] } },
+      { "name": "git_log", "description": "Show commit log", "parameters": { "type": "object", "properties": { "maxCount": { "type": "number", "description": "Max commits to show" } }, "required": [] } },
+      { "name": "git_diff", "description": "Show unstaged diff", "parameters": { "type": "object", "properties": { "path": { "type": "string", "description": "File path to diff" } }, "required": [] } },
+      { "name": "git_commit", "description": "Create a commit", "parameters": { "type": "object", "properties": { "message": { "type": "string", "description": "Commit message" } }, "required": ["message"] } },
+      { "name": "git_branch", "description": "List or create branches", "parameters": { "type": "object", "properties": { "name": { "type": "string", "description": "Branch name to create" }, "list": { "type": "boolean", "description": "List branches" } }, "required": [] } },
+      { "name": "git_push", "description": "Push commits to remote", "parameters": { "type": "object", "properties": { "remote": { "type": "string", "description": "Remote name" }, "branch": { "type": "string", "description": "Branch to push" } }, "required": [] } },
+      { "name": "git_pull", "description": "Pull from remote", "parameters": { "type": "object", "properties": { "remote": { "type": "string" }, "branch": { "type": "string" } }, "required": [] } }
+    ],
+    "commands": [
+      { "name": "git", "description": "Run arbitrary git command", "aliases": ["g"] }
+    ]
+  },
+  "scripts": { "build": "tsc", "dev": "tsc --watch", "clean": "rm -rf dist" },
+  "dependencies": {},
+  "devDependencies": { "@types/node": "^20.17.0", "typescript": "^5.7.0" }
+}

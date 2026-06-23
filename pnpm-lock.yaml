@@ -197,6 +197,51 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  plugins/nexus-plugin-docker:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/nexus-plugin-git:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/nexus-plugin-github:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/nexus-plugin-mcp:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/nexus-plugin-test:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
 packages:
 
   '@alcalzone/ansi-tokenize@0.1.3':

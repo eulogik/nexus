@@ -1,0 +1,28 @@
+{
+  "name": "nexus-plugin-test",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
+  "nexus": {
+    "name": "nexus-plugin-test",
+    "version": "1.0.0",
+    "description": "Test runner integration — detect framework, run tests with coverage",
+    "main": "./dist/index.js",
+    "permissions": ["process:spawn", "fs:read"],
+    "tools": [
+      { "name": "test_detect", "description": "Detect test framework in the project", "parameters": { "type": "object", "properties": { "path": { "type": "string", "description": "Project path" } }, "required": ["path"] } },
+      { "name": "test_run", "description": "Run tests", "parameters": { "type": "object", "properties": { "path": { "type": "string", "description": "Project path" }, "filter": { "type": "string", "description": "Test name filter" }, "coverage": { "type": "boolean", "description": "Generate coverage report" }, "watch": { "type": "boolean", "description": "Watch mode" } }, "required": ["path"] } },
+      { "name": "test_run_file", "description": "Run a specific test file", "parameters": { "type": "object", "properties": { "file": { "type": "string", "description": "Path to test file" } }, "required": ["file"] } },
+      { "name": "test_watch", "description": "Run tests in watch mode on a file", "parameters": { "type": "object", "properties": { "file": { "type": "string", "description": "Test file to watch" } }, "required": ["file"] } }
+    ],
+    "commands": [
+      { "name": "test", "description": "Run tests", "aliases": ["t"] }
+    ]
+  },
+  "scripts": { "build": "tsc", "dev": "tsc --watch", "clean": "rm -rf dist" },
+  "dependencies": {},
+  "devDependencies": { "@types/node": "^20.17.0", "typescript": "^5.7.0" }
+}

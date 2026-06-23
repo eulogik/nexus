@@ -1,7 +1,7 @@
 # Nexus Walkthrough
 
-## Current Phase: Phase 2 — Compression + Plugins (Testing & CI)
-## Last Updated: 2026-06-23
+## Current Phase: Phase 2 — Compression + Plugins (Complete)
+## Last Updated: 2026-06-23 12:30 UTC
 
 ### Project Overview
 Nexus is a universal coding agent harness — a drop-in replacement for Claude Code, Codex, Cursor, and OpenCode. It costs $0 by default (free OpenRouter models), requires zero external dependencies (embedded 0.5B micro-model), and gives developers complete control.
@@ -101,7 +101,7 @@ Nexus is a universal coding agent harness — a drop-in replacement for Claude C
 
 ### Completed (Phase 2 — Compression + Plugins)
 
-#### Testing (389 tests across all packages)
+#### Unit Testing (448 tests originally)
 - [x] nexus-ai: 77 tests — CircuitBreaker, CostTracker, RateLimiter, Provider, Registry, all 4 provider impls
 - [x] nexus-core: 151 tests — Error, Config, Tools, SessionManager, Approval, GitManager, AgentLoop
 - [x] nexus-compress: 76 tests — TokenCounter, SmartCrusher, CodeCompressor, ProseCompressor, ContentRouter, CacheAligner
@@ -110,25 +110,39 @@ Nexus is a universal coding agent harness — a drop-in replacement for Claude C
 - [x] nexus-tui: 24 tests — Utils, Types
 - [x] nexus-sdk: 12 tests — Nexus class
 
+#### Integration Testing
+- [x] Agent loop E2E — write → read → bash → edit cycle via mocked provider
+- [x] Compression pipeline — all 3 compressors + CacheAligner + ContentRouter composition
+- [x] Configuration — disk loading, merging, env var overrides, lifecycle
+
 #### CI/CD
 - [x] GitHub Actions workflow: lint & typecheck, test (4 shards), build, CLI smoke test
 - [x] Concurrency grouping, fail-fast off for sharded tests
 - [x] Summary table in CI output
 
+#### Official Plugins (5/5)
+- [x] nexus-plugin-git — 7 tools (status, log, diff, commit, branch, push, pull), real git CLI
+- [x] nexus-plugin-mcp — 4 tools (connect, list tools, call tool, disconnect), JSON-RPC MCP protocol
+- [x] nexus-plugin-github — 6 tools (list/get/create PR, list/create issues, review PR), GitHub REST API
+- [x] nexus-plugin-docker — 6 tools (ps, images, run, stop, logs, build), Docker CLI
+- [x] nexus-plugin-test — 4 tools (detect framework, run tests, run file, watch), auto-detect vitest/jest/mocha/ava/tape/node:test
+
 #### Infrastructure
 - [x] .gitignore for Node, dist, .nexus, macOS files
 - [x] isolated-vm made optional (falls back to Function-based sandbox)
-- [x] All packages compile with `pnpm -r exec tsc` (zero errors)
+- [x] All 40 packages/apps/plugins compile with `tsc` (zero errors)
 - [x] pnpm@9.15.4, engine requirement Node >=20.18.0
+- [x] Full test suite: 571 tests across 40 files — all passing
+- [x] Git repository initialized on main branch, first commit
 
 ### In Progress
-- [ ] Integration tests for full end-to-end agent loop
-- [ ] Plugin examples (official 5 plugins: git, mcp, github, docker, test)
+- [ ] Model download: Qwen 0.5B requires HuggingFace token (HF_TOKEN env var). Try: `HF_TOKEN=hf_xxx pnpm tsx scripts/download-model.ts`
 - [ ] Benchmark suite against Claude Code, Codex, Cursor baselines
+- [ ] Nexus v1.1 features: Desktop app (Tauri), IDE extensions
 
 ### Blocked
-- isolated-vm native compilation on Node 24 (needs C++20 toolchain) — uses fallback sandbox
-- node-llama-cpp binary download may fail behind corporate proxies
+- isolated-vm native compilation on Node 24 (needs C++20 toolchain) — uses fallback sandbox, works but less secure
+- Qwen3.5 model on HuggingFace requires authentication — provide HF_TOKEN or use `smollm2-360m-instruct-q4_k_m` (MIT, no auth)
 
 ### Decisions Made
 | Decision | Rationale |
