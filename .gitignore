@@ -34,3 +34,4 @@ Desktop.ini
 tmp/
 temp/
 nexus-micro/package-lock.json
+*.package-lock.json
