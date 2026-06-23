@@ -1,6 +1,10 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { User, Bot, Terminal, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
-import type { Message, UserMessage, AssistantMessage, ToolMessage, SystemMessage } from 'nexus-sdk';
+import type { Message } from '../hooks/use-nexus';
+type UserMessage = Message & { role: 'user' };
+type AssistantMessage = Message & { role: 'assistant' };
+type ToolMessage = Message & { role: 'tool' };
+type SystemMessage = Message & { role: 'system' };
 import { Markdown } from './Markdown';
 
 function formatTime(ts: number): string {

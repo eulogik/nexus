@@ -2,12 +2,10 @@ import { useState, useCallback, useEffect } from 'react';
 import { ThemeProvider, useTheme } from './hooks/use-theme';
 import { useNexus } from './hooks/use-nexus';
 import { isTauri, getAppInfo } from './lib/tauri';
-import type { Session, Message as NexusMessage } from 'nexus-sdk';
+import type { Session, Message as NexusMessage } from './hooks/use-nexus';
 
 function messageContent(msg: NexusMessage): string {
-  if ('content' in msg) return msg.content ?? '';
-  if (msg.role === 'tool') return `[Tool: ${msg.toolName}] ${msg.result.output}`;
-  return '';
+  return msg.content ?? '';
 }
 
 type View = 'chat' | 'session' | 'diff';

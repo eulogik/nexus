@@ -33,5 +33,10 @@ Desktop.ini
 # Temp
 tmp/
 temp/
-nexus-micro/package-lock.json
+
+# Rust build artifacts
+target/
+src-tauri/Cargo.lock
+
+# pnpm
 *.package-lock.json

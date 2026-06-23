@@ -11,7 +11,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import clsx from 'clsx';
-import type { Session, SessionCost } from 'nexus-sdk';
+import type { Session } from '../hooks/use-nexus';
 
 function formatCost(cost: number): string {
   if (cost <= 0) return '$0.00';

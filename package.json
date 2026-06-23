@@ -4,7 +4,9 @@
   "private": true,
   "description": "Universal Coding Agent Harness — Zero Cost. Zero Dependencies. 100% Control.",
   "packageManager": "pnpm@9.15.4",
-  "engines": { "node": ">=20.18.0" },
+  "engines": {
+    "node": ">=20.18.0"
+  },
   "scripts": {
     "build": "turbo run build",
     "build:cli": "turbo run build --filter=nexus-cli",
@@ -25,6 +27,7 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^20.17.0",
+    "sharp": "^0.35.2",
     "tsx": "^4.19.0",
     "turbo": "^2.3.0",
     "typescript": "^5.7.0",

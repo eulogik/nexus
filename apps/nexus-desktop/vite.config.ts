@@ -21,8 +21,6 @@ export default defineConfig({
     target: process.env.TAURI_PLATFORM === 'windows' ? 'chrome105' : 'safari14',
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_DEBUG,
-    rollupOptions: {
-      external: ['nexus-sdk', 'nexus-core', 'nexus-ai', 'nexus-micro', 'nexus-compress', 'nexus-plugin-sdk'],
-    },
+    rollupOptions: {},
   },
 });

@@ -1,4 +1,4 @@
-import type { Message } from 'nexus-sdk';
+import type { Message } from '../hooks/use-nexus';
 import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 

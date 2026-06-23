@@ -1,5 +1,5 @@
 import { Circle, Trash2, Download, Copy } from 'lucide-react';
-import type { Session } from 'nexus-sdk';
+import type { Session } from '../hooks/use-nexus';
 
 export interface SidebarSessionItemProps {
   session: Session;

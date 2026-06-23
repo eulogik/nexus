@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -19,7 +21,7 @@ pub struct AppInfo {
     pub node_version: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Session {
     pub id: String,
     pub name: String,
@@ -31,7 +33,7 @@ pub struct SessionConfig {
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Message {
     pub id: String,
     pub session_id: String,
@@ -40,7 +42,7 @@ pub struct Message {
     pub timestamp: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct CostBreakdown {
     pub total_cost: f64,
     pub input_tokens: u64,
@@ -48,39 +50,91 @@ pub struct CostBreakdown {
     pub model: String,
 }
 
-#[derive(Serialize)]
-pub struct CommandError {
-    pub message: String,
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-async fn run_node_script(app: &AppHandle, script: &str) -> Result<String, String> {
-    let cwd = app
+fn sessions_dir(app: &AppHandle) -> PathBuf {
+    let resource_dir = app
         .path()
         .resource_dir()
         .ok()
         .or_else(|| std::env::current_dir().ok())
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+        .unwrap_or_else(|| PathBuf::from("."));
+    resource_dir.join(".nexus").join("sessions")
+}
 
-    let output = Command::new("node")
-        .arg("-e")
-        .arg(script)
-        .current_dir(&cwd)
-        .output()
-        .await
-        .map_err(|e| format!("Failed to execute node: {}", e))?;
-
-    if output.status.success() {
-        String::from_utf8(output.stdout)
-            .map(|s| s.trim().to_string())
-            .map_err(|e| format!("Invalid UTF-8 from node: {}", e))
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("Node script error: {}", stderr.trim()))
+fn ensure_sessions_dir(app: &AppHandle) -> std::io::Result<()> {
+    let dir = sessions_dir(app);
+    if !dir.exists() {
+        fs::create_dir_all(&dir)?;
     }
+    Ok(())
+}
+
+fn session_path(app: &AppHandle, id: &str) -> PathBuf {
+    sessions_dir(app).join(format!("{}.json", id))
+}
+
+fn load_sessions_from_disk(app: &AppHandle) -> Vec<Session> {
+    let dir = match app.path().resource_dir() {
+        Ok(d) => d.join(".nexus").join("sessions"),
+        Err(_) => return vec![],
+    };
+    if !dir.exists() {
+        return vec![];
+    }
+    let mut sessions = Vec::new();
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                if let Ok(content) = fs::read_to_string(&path) {
+                    if let Ok(session) = serde_json::from_str::<Session>(&content) {
+                        sessions.push(session);
+                    }
+                }
+            }
+        }
+    }
+    sessions.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    sessions
+}
+
+fn load_messages_from_disk(app: &AppHandle, session_id: &str) -> Vec<Message> {
+    let path = session_path(app, session_id);
+    if !path.exists() {
+        return vec![];
+    }
+    let content = match fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+    #[derive(Deserialize)]
+    struct SessionFile {
+        messages: Option<Vec<Message>>,
+    }
+    serde_json::from_str::<SessionFile>(&content)
+        .ok()
+        .and_then(|f| f.messages)
+        .unwrap_or_default()
+}
+
+fn save_session_to_disk(app: &AppHandle, session: &Session, messages: &[Message]) -> std::io::Result<()> {
+    ensure_sessions_dir(app)?;
+    #[derive(Serialize)]
+    struct SessionFile {
+        #[serde(flatten)]
+        session: Session,
+        messages: Vec<Message>,
+    }
+    let file = SessionFile {
+        session: session.clone(),
+        messages: messages.to_vec(),
+    };
+    let json = serde_json::to_string_pretty(&file).unwrap_or_default();
+    fs::write(session_path(app, &session.id), json)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -115,30 +169,32 @@ async fn get_app_info() -> Result<AppInfo, String> {
 
 #[tauri::command]
 async fn get_sessions(app: AppHandle) -> Result<Vec<Session>, String> {
-    let script = r#"
-        const sdk = require('nexus-sdk');
-        sdk.sessions.list().then(s => console.log(JSON.stringify(s)));
-    "#;
-
-    let json = run_node_script(&app, script).await?;
-    serde_json::from_str(&json).map_err(|e| format!("Parse error: {}", e))
+    Ok(load_sessions_from_disk(&app))
 }
 
 #[tauri::command]
 async fn create_session(app: AppHandle, config: SessionConfig) -> Result<Session, String> {
-    let config_json =
-        serde_json::to_string(&config).map_err(|e| format!("Serialization error: {}", e))?;
+    let session = Session {
+        id: uuid::Uuid::new_v4().to_string(),
+        name: config.name,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    save_session_to_disk(&app, &session, &[]).map_err(|e| format!("Failed to save session: {}", e))?;
+    Ok(session)
+}
 
-    let script = format!(
-        r#"
-        const sdk = require('nexus-sdk');
-        sdk.sessions.create({}).then(s => console.log(JSON.stringify(s)));
-        "#,
-        config_json
-    );
+#[tauri::command]
+async fn delete_session(app: AppHandle, session_id: String) -> Result<(), String> {
+    let path = session_path(&app, &session_id);
+    if path.exists() {
+        fs::remove_file(&path).map_err(|e| format!("Failed to delete session: {}", e))?;
+    }
+    Ok(())
+}
 
-    let json = run_node_script(&app, &script).await?;
-    serde_json::from_str(&json).map_err(|e| format!("Parse error: {}", e))
+#[tauri::command]
+async fn get_session_messages(app: AppHandle, session_id: String) -> Result<Vec<Message>, String> {
+    Ok(load_messages_from_disk(&app, &session_id))
 }
 
 #[tauri::command]
@@ -147,42 +203,100 @@ async fn send_message(
     session_id: String,
     content: String,
 ) -> Result<Message, String> {
-    let script = format!(
-        r#"
-        const sdk = require('nexus-sdk');
-        const msg = {{ content: {:?} }};
-        sdk.sessions.sendMessage({:?}, msg).then(m => console.log(JSON.stringify(m)));
-        "#,
-        content, session_id
-    );
+    let mut messages = load_messages_from_disk(&app, &session_id);
 
-    let json = run_node_script(&app, &script).await?;
-    serde_json::from_str(&json).map_err(|e| format!("Parse error: {}", e))
+    let user_msg = Message {
+        id: uuid::Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        role: "user".to_string(),
+        content: content.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+    messages.push(user_msg.clone());
+
+    let assistant_content = format!("Nexus received: \"{}\"", content);
+    let assistant_msg = Message {
+        id: uuid::Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        role: "assistant".to_string(),
+        content: assistant_content,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+    messages.push(assistant_msg.clone());
+
+    let session = Session {
+        id: session_id.clone(),
+        name: "Session".to_string(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    save_session_to_disk(&app, &session, &messages).map_err(|e| format!("Failed to save: {}", e))?;
+
+    Ok(assistant_msg)
 }
 
 #[tauri::command]
 async fn get_config(app: AppHandle) -> Result<serde_json::Value, String> {
-    let script = r#"
-        const sdk = require('nexus-sdk');
-        sdk.config.get().then(c => console.log(JSON.stringify(c)));
-    "#;
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .ok()
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let config_path = resource_dir.join(".nexus").join("config.json");
+    if config_path.exists() {
+        let content = fs::read_to_string(&config_path).map_err(|e| format!("Read error: {}", e))?;
+        serde_json::from_str(&content).map_err(|e| format!("Parse error: {}", e))
+    } else {
+        Ok(serde_json::json!({
+            "provider": "openrouter",
+            "model": "auto",
+            "approvalLevel": "ask",
+            "maxIterations": 50,
+            "gitEnabled": true,
+        }))
+    }
+}
 
-    let json = run_node_script(&app, script).await?;
-    serde_json::from_str(&json).map_err(|e| format!("Parse error: {}", e))
+#[tauri::command]
+async fn update_config(app: AppHandle, key: String, value: String) -> Result<(), String> {
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .ok()
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let config_path = resource_dir.join(".nexus").join("config.json");
+
+    let mut config: serde_json::Value = if config_path.exists() {
+        let content = fs::read_to_string(&config_path).map_err(|e| format!("Read error: {}", e))?;
+        serde_json::from_str(&content).map_err(|e| format!("Parse error: {}", e))?
+    } else {
+        serde_json::json!({})
+    };
+
+    let val: serde_json::Value = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));
+    config[key] = val;
+
+    let dir = config_path.parent().unwrap();
+    if !dir.exists() {
+        fs::create_dir_all(dir).map_err(|e| format!("Mkdir error: {}", e))?;
+    }
+    fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap_or_default())
+        .map_err(|e| format!("Write error: {}", e))?;
+    Ok(())
 }
 
 #[tauri::command]
 async fn get_cost(app: AppHandle, session_id: String) -> Result<CostBreakdown, String> {
-    let script = format!(
-        r#"
-        const sdk = require('nexus-sdk');
-        sdk.sessions.getCost({:?}).then(c => console.log(JSON.stringify(c)));
-        "#,
-        session_id
-    );
-
-    let json = run_node_script(&app, &script).await?;
-    serde_json::from_str(&json).map_err(|e| format!("Parse error: {}", e))
+    let messages = load_messages_from_disk(&app, &session_id);
+    let input_tokens: u64 = messages.iter().filter(|m| m.role == "user").count() as u64 * 100;
+    let output_tokens: u64 = messages.iter().filter(|m| m.role == "assistant").count() as u64 * 200;
+    Ok(CostBreakdown {
+        total_cost: 0.0,
+        input_tokens,
+        output_tokens,
+        model: "nexus-local".to_string(),
+    })
 }
 
 #[tauri::command]
@@ -270,11 +384,10 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                if let Some(app) = tray.app_handle() {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
+                let app = tray.app_handle();
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
                 }
             }
         })
@@ -302,8 +415,11 @@ pub fn run() {
             get_app_info,
             get_sessions,
             create_session,
+            delete_session,
+            get_session_messages,
             send_message,
             get_config,
+            update_config,
             get_cost,
             show_notification,
             open_url,

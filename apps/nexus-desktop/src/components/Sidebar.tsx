@@ -8,7 +8,7 @@ import {
   PanelLeftClose,
   PanelLeft,
 } from 'lucide-react';
-import type { Session } from 'nexus-sdk';
+import type { Session } from '../hooks/use-nexus';
 import { SidebarSessionItem } from './SidebarSessionItem';
 
 export interface SidebarProps {
