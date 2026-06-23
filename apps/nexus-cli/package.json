@@ -1,0 +1,12 @@
+{
+  "name": "nexus-cli",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "nexus": "./dist/index.js" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": { "build": "tsc", "dev": "tsx watch src/index.ts", "clean": "rm -rf dist", "start": "node dist/index.js" },
+  "dependencies": { "nexus-core": "workspace:*", "nexus-ai": "workspace:*", "nexus-micro": "workspace:*", "nexus-tui": "workspace:*", "nexus-compress": "workspace:*", "nexus-plugin-sdk": "workspace:*", "chalk": "^5.4.0", "yargs": "^17.7.0" },
+  "devDependencies": { "@types/node": "^20.17.0", "@types/yargs": "^17.0.0", "typescript": "^5.7.0", "tsx": "^4.19.0" }
+}

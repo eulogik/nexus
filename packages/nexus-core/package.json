@@ -1,0 +1,12 @@
+{
+  "name": "nexus-core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
+  "scripts": { "build": "tsc", "dev": "tsc --watch", "clean": "rm -rf dist" },
+  "dependencies": { "zod": "^3.24.0", "nexus-ai": "workspace:*", "nexus-compress": "workspace:*", "nexus-micro": "workspace:*", "minimatch": "^10.0.0" },
+  "devDependencies": { "@types/node": "^20.17.0", "typescript": "^5.7.0" }
+}

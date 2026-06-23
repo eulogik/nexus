@@ -1,0 +1,35 @@
+node_modules/
+dist/
+.turbo
+*.tsbuildinfo
+
+# Nexus runtime files
+.nexus/
+
+# macOS
+.DS_Store
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/settings.json
+.idea/
+*.iml
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temp
+tmp/
+temp/

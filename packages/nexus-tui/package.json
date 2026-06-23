@@ -1,0 +1,25 @@
+{
+  "name": "nexus-tui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" },
+    "./ink": { "import": "./dist/ink.js", "types": "./dist/ink.d.ts" }
+  },
+  "scripts": { "build": "tsc", "dev": "tsc --watch", "clean": "rm -rf dist" },
+  "dependencies": {
+    "ink": "^5.0.0",
+    "react": "^19.0.0",
+    "nexus-core": "workspace:*",
+    "nexus-ai": "workspace:*",
+    "chalk": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}

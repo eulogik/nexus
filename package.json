@@ -1,0 +1,36 @@
+{
+  "name": "nexus",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Universal Coding Agent Harness — Zero Cost. Zero Dependencies. 100% Control.",
+  "packageManager": "pnpm@9.15.4",
+  "engines": { "node": ">=20.18.0" },
+  "scripts": {
+    "build": "turbo run build",
+    "build:cli": "turbo run build --filter=nexus-cli",
+    "dev": "turbo run dev --parallel",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "tsc --noEmit && biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "clean": "turbo run clean && rm -rf node_modules .turbo",
+    "benchmark": "tsx scripts/benchmark.ts",
+    "release": "tsx scripts/release.ts",
+    "doctor": "tsx apps/nexus-cli/src/index.ts doctor",
+    "nexus": "tsx apps/nexus-cli/src/index.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^20.17.0",
+    "tsx": "^4.19.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
+  }
+}
