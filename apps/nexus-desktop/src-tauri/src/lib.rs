@@ -54,14 +54,11 @@ pub struct CostBreakdown {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn sessions_dir(app: &AppHandle) -> PathBuf {
-    let resource_dir = app
-        .path()
-        .resource_dir()
-        .ok()
-        .or_else(|| std::env::current_dir().ok())
-        .unwrap_or_else(|| PathBuf::from("."));
-    resource_dir.join(".nexus").join("sessions")
+fn sessions_dir(_app: &AppHandle) -> PathBuf {
+    std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join(".nexus")
+        .join("sessions")
 }
 
 fn ensure_sessions_dir(app: &AppHandle) -> std::io::Result<()> {
@@ -235,14 +232,11 @@ async fn send_message(
 }
 
 #[tauri::command]
-async fn get_config(app: AppHandle) -> Result<serde_json::Value, String> {
-    let resource_dir = app
-        .path()
-        .resource_dir()
-        .ok()
-        .or_else(|| std::env::current_dir().ok())
-        .unwrap_or_else(|| PathBuf::from("."));
-    let config_path = resource_dir.join(".nexus").join("config.json");
+async fn get_config(_app: AppHandle) -> Result<serde_json::Value, String> {
+    let config_path = std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join(".nexus")
+        .join("config.json");
     if config_path.exists() {
         let content = fs::read_to_string(&config_path).map_err(|e| format!("Read error: {}", e))?;
         serde_json::from_str(&content).map_err(|e| format!("Parse error: {}", e))
@@ -258,14 +252,11 @@ async fn get_config(app: AppHandle) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn update_config(app: AppHandle, key: String, value: String) -> Result<(), String> {
-    let resource_dir = app
-        .path()
-        .resource_dir()
-        .ok()
-        .or_else(|| std::env::current_dir().ok())
-        .unwrap_or_else(|| PathBuf::from("."));
-    let config_path = resource_dir.join(".nexus").join("config.json");
+async fn update_config(_app: AppHandle, key: String, value: String) -> Result<(), String> {
+    let config_path = std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join(".nexus")
+        .join("config.json");
 
     let mut config: serde_json::Value = if config_path.exists() {
         let content = fs::read_to_string(&config_path).map_err(|e| format!("Read error: {}", e))?;
