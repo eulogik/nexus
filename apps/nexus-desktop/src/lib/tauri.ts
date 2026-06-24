@@ -1,3 +1,5 @@
+import type { Session, Message } from '../hooks/use-nexus';
+
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
@@ -40,4 +42,20 @@ export async function openUrl(url: string): Promise<void> {
   } catch {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
+}
+
+// Project/File commands
+export interface FileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+}
+
+export async function listProjectFiles(dir?: string): Promise<FileEntry[]> {
+  return invoke('list_project_files', dir ? { path: dir } : { path: '' });
+}
+
+export async function readProjectFile(path: string): Promise<string> {
+  return invoke('read_project_file', { path });
 }

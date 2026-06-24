@@ -194,6 +194,63 @@ async fn get_session_messages(app: AppHandle, session_id: String) -> Result<Vec<
     Ok(load_messages_from_disk(&app, &session_id))
 }
 
+#[derive(Serialize)]
+pub struct FileEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size: u64,
+}
+
+#[tauri::command]
+async fn list_project_files(path: String) -> Result<Vec<FileEntry>, String> {
+    let base = if path.is_empty() || path == "." {
+        std::env::current_dir().map_err(|e| format!("cwd error: {}", e))?
+    } else {
+        std::path::PathBuf::from(&path)
+    };
+
+    let mut entries = Vec::new();
+    let ignore_dirs = [".git", "node_modules", "target", ".nexus", "dist", ".turbo", "coverage"];
+
+    let mut read_dir = match fs::read_dir(&base) {
+        Ok(d) => d,
+        Err(_) => return Ok(entries),
+    };
+
+    let mut dirs = Vec::new();
+    let mut files = Vec::new();
+
+    for entry in read_dir.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') || ignore_dirs.contains(&name.as_str()) {
+            continue;
+        }
+        let path = entry.path().to_string_lossy().to_string();
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        let fe = FileEntry { name, path, is_dir, size };
+        if is_dir {
+            dirs.push(fe);
+        } else {
+            files.push(fe);
+        }
+    }
+
+    dirs.sort_by(|a, b| a.name.cmp(&b.name));
+    files.sort_by(|a, b| a.name.cmp(&b.name));
+    entries.extend(dirs);
+    entries.extend(files);
+
+    Ok(entries)
+}
+
+#[tauri::command]
+async fn read_project_file(path: String) -> Result<String, String> {
+    let content = fs::read_to_string(&path).map_err(|e| format!("Read error: {}", e))?;
+    Ok(content)
+}
+
 #[tauri::command]
 async fn send_message(
     app: AppHandle,
@@ -211,7 +268,12 @@ async fn send_message(
     };
     messages.push(user_msg.clone());
 
-    let assistant_content = format!("Nexus received: \"{}\"", content);
+    // Try to call the Node.js bridge for real LLM response
+    let assistant_content = match call_bridge_chat(&app, &session_id, &content).await {
+        Ok(resp) => resp,
+        Err(_) => format!("Nexus received: \"{}\"\n\n_Connect an API key for real responses. Run: nexus config set apiKey <key>_", content),
+    };
+
     let assistant_msg = Message {
         id: uuid::Uuid::new_v4().to_string(),
         session_id: session_id.clone(),
@@ -229,6 +291,93 @@ async fn send_message(
     save_session_to_disk(&app, &session, &messages).map_err(|e| format!("Failed to save: {}", e))?;
 
     Ok(assistant_msg)
+}
+
+fn read_config() -> serde_json::Value {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let config_path = cwd.join(".nexus").join("config.json");
+    if let Ok(content) = fs::read_to_string(&config_path) {
+        if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
+            return config;
+        }
+    }
+    let mut def = serde_json::json!({});
+    if let Ok(key) = std::env::var("NEXUS_OPENROUTER_API_KEY") {
+        def["apiKey"] = serde_json::Value::String(key);
+    }
+    def
+}
+
+async fn call_bridge_chat(_app: &AppHandle, session_id: &str, content: &str) -> Result<String, String> {
+    let cwd = std::env::current_dir()
+        .map_err(|e| format!("cwd error: {}", e))?;
+    let config = read_config();
+    let api_key = config["apiKey"].as_str().unwrap_or("").to_string();
+
+    if api_key.is_empty() {
+        return Err("No API key configured. Set NEXUS_OPENROUTER_API_KEY env var or configure in .nexus/config.json".to_string());
+    }
+
+    // Load previous messages from session file
+    let sessions_dir = cwd.join(".nexus").join("sessions");
+    let session_path = sessions_dir.join(format!("{}.json", session_id));
+    let mut messages = vec![serde_json::json!({"role": "system", "content": "You are Nexus, a helpful coding assistant."})];
+
+    if session_path.exists() {
+        if let Ok(data) = fs::read_to_string(&session_path) {
+            if let Ok(sf) = serde_json::from_str::<serde_json::Value>(&data) {
+                if let Some(msgs) = sf["messages"].as_array() {
+                    for m in msgs {
+                        if let (Some(role), Some(c)) = (m["role"].as_str(), m["content"].as_str()) {
+                            messages.push(serde_json::json!({"role": role, "content": c}));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Add current user message
+    messages.push(serde_json::json!({"role": "user", "content": content}));
+
+    let model = config["model"].as_str().unwrap_or("auto");
+    let request = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 4096,
+    });
+
+    let esc_body = serde_json::to_string(&request).map_err(|e| format!("JSON error: {}", e))?;
+    let esc_key = serde_json::to_string(&api_key).map_err(|e| format!("JSON error: {}", e))?;
+
+    let js_code = format!(
+        r#"const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {{
+  method: 'POST',
+  headers: {{ 'Authorization': 'Bearer ' + {key}, 'Content-Type': 'application/json' }},
+  body: {body}
+}});
+if (!r.ok) {{ const t = await r.text(); throw new Error(r.status + ' ' + t); }}
+const j = await r.json();
+process.stdout.write(j.choices[0].message.content || '');"#,
+        key = esc_key,
+        body = esc_body
+    );
+
+    let output = Command::new("node")
+        .args(["--input-type=module", "-e", &js_code])
+        .current_dir(&cwd)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run node: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(stdout.trim().to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("Node error: {}", stderr.trim()))
+    }
 }
 
 #[tauri::command]
@@ -415,6 +564,8 @@ pub fn run() {
             show_notification,
             open_url,
             get_file_diff,
+            list_project_files,
+            read_project_file,
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {

@@ -40,3 +40,4 @@ src-tauri/Cargo.lock
 
 # pnpm
 *.package-lock.json
+.nexus/

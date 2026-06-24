@@ -230,13 +230,71 @@ Nexus is a universal coding agent harness — a drop-in replacement for Claude C
 | NEXUS_PLUGINS_DIR | Custom plugins directory |
 | NEXUS_DISABLE_TELEMETRY | No telemetry (always true) |
 
+### Desktop App (Phase 3 — v1.1)
+
+#### Build & Run
+- **Status**: Builds and runs on macOS (arm64). Requires Node.js + pnpm workspace.
+- **Last build**: 2026-06-23 — 2 bundles: `Nexus.app` + `Nexus_1.1.0_aarch64.dmg`
+- **Binary size**: ~18MB (Tauri v2)
+- **Install**: `cp -R apps/nexus-desktop/src-tauri/target/release/bundle/macos/Nexus.app /Applications/`
+
+#### Architecture
+```
+Frontend (React + Vite + Tailwind)
+  ↕ Tauri IPC (invoke)
+Rust Backend (session mgmt, LLM bridge, file tree)
+  ↕ spawns Node.js for LLM calls
+OpenRouter API (or other providers)
+```
+
+#### Fixes Applied
+1. **Blank window**: Removed `nexus-sdk` import from frontend (Node.js APIs incompatible with webview). Rewrote `use-nexus.tsx` to use `tauri::invoke()`.
+2. **Rust compilation errors**:
+   - `CostBreakdown` — added `#[derive(Deserialize)]`
+   - `tray.app_handle()` — Tauri v2 returns `&AppHandle` directly, not `Option`
+   - Icons converted to RGBA PNG + ICNS via sharp + sips
+3. **Path resolution**: Changed from `app.path().resource_dir()` to `std::env::current_dir()` for sessions/config
+4. **LLM integration**: Rust backend spawns `node --input-type=module -e` with inline ESM to call OpenRouter API directly via `fetch()`
+
+#### Features
+- [x] Sessions sidebar with create/delete
+- [x] Project file tree (browse files, read content)
+- [x] Chat with LLM (OpenRouter free models via inline Node.js)
+- [x] Status bar with API key status indicator
+- [x] Keyboard shortcuts (Cmd+N new session, Cmd+W close, Cmd+1/2 tab switch)
+- [x] Toggle between Sessions and Project tabs
+- [x] System tray (Close to tray, show on click, menu)
+- [ ] Streaming responses (current: full response on send)
+- [ ] Settings modal (API key config, model selection)
+- [ ] Command palette (Cmd+K)
+- [ ] Diff viewer
+- [ ] Toast notifications
+
+#### Known Issues
+1. `open_url` uses deprecated `tauri-plugin-shell::Shell::open` — should migrate to `tauri-plugin-opener`
+2. LLM calls block UI during API response (no streaming yet)
+3. Bridge script requires `node_modules` in current directory (works in dev, fails in production bundle)
+4. File tree shows only one level (no recursive expand)
+
+### Testing
+- **571 tests passing** across 40 files (unchanged)
+- **Test command**: `pnpm test` or `npx vitest run`
+- **CI**: GitHub Actions with 4 shards + lint + build + CLI smoke test
+- **CI status**: Removed from git due to PAT scope issue (`workflow` scope missing). Restored locally.
+
+### GitHub
+- **Remote**: `https://github.com/eulogik/nexus.git`
+- **Branch**: `main`
+- **PAT**: `ghp_***` (needs `workflow` scope for CI — generate a new token with workflow scope)
+- **Org**: eulogik
+
 ### Handoff Notes for Next Developer
 1. **First thing**: Run `tsx scripts/download-model.ts` to pull the 300MB micro-model
 2. **Set your key**: `export NEXUS_OPENROUTER_API_KEY='sk-or-v1-...'`
 3. **Verify**: `node apps/nexus-cli/dist/index.js doctor`
-4. **Run tests**: `pnpm test` (389 tests, all should pass)
+4. **Run tests**: `pnpm test` (571 tests, all should pass)
 5. **Start coding**: `node apps/nexus-cli/dist/index.js chat`
-6. **Directory structure**: All source in `packages/*/src/`, tests in `packages/*/test/`
-7. **Building**: `pnpm -r exec tsc` compiles all packages
-8. **Adding a package**: Create dir, add to pnpm-workspace.yaml, copy package.json pattern
-9. **The `isolated-vm` issue**: If on Node 24, native build fails. The sandbox falls back — it works but is less secure. Fix by installing with `CXXFLAGS=-std=c++20` or use Node 22.
+6. **Build desktop**: `pnpm --filter nexus-desktop tauri build`
+7. **Run desktop dev**: `pnpm --filter nexus-desktop tauri dev`
+8. **API key**: Already configured in `.nexus/config.json` for this machine
+9. **The `isolated-vm` issue**: If on Node 24, native build fails. The sandbox falls back — it works but is less secure.
