@@ -1,5 +1,3 @@
-import type { Session, Message } from '../hooks/use-nexus';
-
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
@@ -18,11 +16,10 @@ export async function listen<T>(event: string, handler: (payload: T) => void): P
     const { listen: tauriListen } = await import('@tauri-apps/api/event');
     return tauriListen<T>(event, (e) => handler(e.payload));
   }
-  console.warn(`[tauri] listen('${event}') called outside Tauri environment`);
   return () => {};
 }
 
-export async function getAppInfo(): Promise<{ name: string; version: string; tauriVersion: string }> {
+export async function getAppInfo(): Promise<{ version: string; platform: string; node_version: string }> {
   return invoke('get_app_info');
 }
 
@@ -44,7 +41,7 @@ export async function openUrl(url: string): Promise<void> {
   }
 }
 
-// Project/File commands
+// ── Project File types ──
 export interface FileEntry {
   name: string;
   path: string;
@@ -52,10 +49,23 @@ export interface FileEntry {
   size: number;
 }
 
-export async function listProjectFiles(dir?: string): Promise<FileEntry[]> {
-  return invoke('list_project_files', dir ? { path: dir } : { path: '' });
+export interface Project {
+  id: string;
+  name: string;
+  path: string;
+  created_at: string;
 }
 
-export async function readProjectFile(path: string): Promise<string> {
-  return invoke('read_project_file', { path });
+export interface Session {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface Message {
+  id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  timestamp: string;
 }

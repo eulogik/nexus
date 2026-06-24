@@ -288,6 +288,23 @@ OpenRouter API (or other providers)
 - **PAT**: `ghp_***` (needs `workflow` scope for CI — generate a new token with workflow scope)
 - **Org**: eulogik
 
+### Redesign Plan (from competitive analysis)
+
+After studying Codex, OpenCode, Antigravity 2.0, Qwen Code, and MiMo Code:
+
+**5 critical problems:**
+1. **No project model** — shows raw fs (all folders). Must let users add projects, sessions live inside projects.
+2. **Settings doesn't save** — `update_config` invoke likely broken. Categories needed: API Keys, Models, Permissions, Appearance.
+3. **No diff viewer** — every competitor has built-in diffs with stage/revert.
+4. **No command palette** — Cmd+K is universal muscle memory.
+5. **No permissions/sandbox** — agents need bounded fs access and approval gates.
+
+**Priority order:**
+1. Fix the architecture: Projects > Sessions > Files sidebar tree
+2. Fix settings persistence + add categories
+3. Add diff viewer + command palette + agent status indicator
+4. Streaming responses, multi-project, sandbox gates
+
 ### Handoff Notes for Next Developer
 1. **First thing**: Run `tsx scripts/download-model.ts` to pull the 300MB micro-model
 2. **Set your key**: `export NEXUS_OPENROUTER_API_KEY='sk-or-v1-...'`

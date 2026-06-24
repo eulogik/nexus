@@ -1,20 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { isTauri } from '../lib/tauri';
-
-export interface Session {
-  id: string;
-  name: string;
-  created_at: string;
-}
-
-export interface Message {
-  id: string;
-  session_id: string;
-  role: string;
-  content: string;
-  timestamp: string;
-}
+import { invoke, isTauri, type Session, type Message } from '../lib/tauri';
 
 interface UseNexusState {
   sessions: Session[];
@@ -29,10 +14,9 @@ interface UseNexusReturn extends UseNexusState {
   selectSession: (id: string) => void;
   deleteSession: (id: string) => void;
   sendMessage: (content: string) => Promise<void>;
-  updateConfig: (key: string, value: unknown) => void;
 }
 
-export function useNexus(): UseNexusReturn {
+export function useNexus(projectId: string | null): UseNexusReturn {
   const [state, setState] = useState<UseNexusState>({
     sessions: [],
     activeSessionId: null,
@@ -41,33 +25,32 @@ export function useNexus(): UseNexusReturn {
     error: null,
   });
 
-  useEffect(() => {
-    if (!isTauri()) return;
-    invoke<Session[]>('get_sessions')
-      .then(sessions => setState(prev => ({ ...prev, sessions })))
-      .catch(() => {});
-  }, []);
-
-  const syncSessions = useCallback(() => {
-    if (!isTauri()) return;
-    invoke<Session[]>('get_sessions')
-      .then(sessions => setState(prev => ({ ...prev, sessions })))
-      .catch(() => {});
-  }, []);
-
-  const createSession = useCallback((name: string) => {
-    if (!isTauri()) {
-      const id = crypto.randomUUID();
-      const session: Session = { id, name, created_at: new Date().toISOString() };
-      setState(prev => ({
-        ...prev,
-        sessions: [...prev.sessions, session],
-        activeSessionId: id,
-        messages: [],
-      }));
+  const syncSessions = useCallback(async () => {
+    if (!isTauri() || !projectId) {
+      setState(prev => ({ ...prev, sessions: [] }));
       return;
     }
-    invoke<Session>('create_session', { config: { name } })
+    try {
+      const sessions = await invoke<Session[]>('list_sessions', { projectId });
+      setState(prev => ({ ...prev, sessions }));
+    } catch {}
+  }, [projectId]);
+
+  useEffect(() => {
+    syncSessions().then(() => {
+      // If there was a previously active session, check if it still exists
+      setState(prev => {
+        if (prev.activeSessionId && !prev.sessions.find(s => s.id === prev.activeSessionId)) {
+          return { ...prev, activeSessionId: null, messages: [], status: 'idle' };
+        }
+        return prev;
+      });
+    });
+  }, [syncSessions]);
+
+  const createSession = useCallback((name: string) => {
+    if (!isTauri() || !projectId) return;
+    invoke<Session>('create_session', { projectId, config: { name } })
       .then(session => {
         setState(prev => ({
           ...prev,
@@ -79,19 +62,19 @@ export function useNexus(): UseNexusReturn {
       .catch(err => {
         setState(prev => ({ ...prev, status: 'error', error: String(err) }));
       });
-  }, []);
+  }, [projectId]);
 
   const selectSession = useCallback((id: string) => {
     setState(prev => ({ ...prev, activeSessionId: id, status: 'idle', error: null }));
-    if (!isTauri()) return;
-    invoke<Message[]>('get_session_messages', { sessionId: id })
+    if (!isTauri() || !projectId) return;
+    invoke<Message[]>('get_session_messages', { projectId, sessionId: id })
       .then(messages => setState(prev => ({ ...prev, messages })))
       .catch(() => {});
-  }, []);
+  }, [projectId]);
 
   const deleteSession = useCallback((id: string) => {
-    if (isTauri()) {
-      invoke('delete_session', { sessionId: id }).catch(() => {});
+    if (isTauri() && projectId) {
+      invoke('delete_session', { projectId, sessionId: id }).catch(() => {});
     }
     syncSessions();
     setState(prev =>
@@ -99,10 +82,10 @@ export function useNexus(): UseNexusReturn {
         ? { ...prev, activeSessionId: null, messages: [], status: 'idle' }
         : prev
     );
-  }, [syncSessions]);
+  }, [syncSessions, projectId]);
 
   const sendMessage = useCallback(async (content: string) => {
-    if (!state.activeSessionId) return;
+    if (!state.activeSessionId || !projectId) return;
     setState(prev => ({ ...prev, status: 'streaming', error: null }));
 
     const userMsg: Message = {
@@ -130,6 +113,7 @@ export function useNexus(): UseNexusReturn {
 
     try {
       const result = await invoke<Message>('send_message', {
+        projectId,
         sessionId: state.activeSessionId,
         content,
       });
@@ -137,12 +121,7 @@ export function useNexus(): UseNexusReturn {
     } catch (err) {
       setState(prev => ({ ...prev, status: 'error', error: String(err) }));
     }
-  }, [state.activeSessionId]);
-
-  const updateConfig = useCallback((key: string, value: unknown) => {
-    if (!isTauri()) return;
-    invoke('update_config', { key, value: String(value) }).catch(() => {});
-  }, []);
+  }, [state.activeSessionId, projectId]);
 
   return {
     ...state,
@@ -150,6 +129,5 @@ export function useNexus(): UseNexusReturn {
     selectSession,
     deleteSession,
     sendMessage,
-    updateConfig,
   };
 }
