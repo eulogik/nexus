@@ -7,7 +7,7 @@ use tauri::{
     AppHandle, Emitter, Manager, RunEvent, WindowEvent,
 };
 use tauri_plugin_notification::NotificationExt;
-use tauri_plugin_shell::ShellExt;
+use tauri_plugin_opener::OpenerExt;
 use tokio::process::Command;
 
 // ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ async fn list_project_files(path: String) -> Result<Vec<FileEntry>, String> {
     let mut entries = Vec::new();
     let ignore_dirs = [".git", "node_modules", "target", ".nexus", "dist", ".turbo", "coverage"];
 
-    let mut read_dir = match fs::read_dir(&base) {
+    let read_dir = match fs::read_dir(&base) {
         Ok(d) => d,
         Err(_) => return Ok(entries),
     };
@@ -456,8 +456,8 @@ async fn show_notification(
 
 #[tauri::command]
 async fn open_url(app: AppHandle, url: String) -> Result<(), String> {
-    app.shell()
-        .open(&url, None)
+    app.opener()
+        .open_url(&url, None::<&str>)
         .map_err(|e| format!("Failed to open URL: {}", e))?;
     Ok(())
 }
@@ -546,7 +546,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             setup_tray(app.handle())?;
             Ok(())

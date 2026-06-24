@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { ThemeProvider, useTheme } from './hooks/use-theme';
 import { useNexus } from './hooks/use-nexus';
 import { useProject, type ProjectFile } from './hooks/use-project';
@@ -188,11 +188,13 @@ function StatusBar({
   sessionCount,
   appVersion,
   apiKeyStatus,
+  onSettings,
 }: {
   status: string;
   sessionCount: number;
   appVersion: string;
   apiKeyStatus: 'configured' | 'missing' | 'loading';
+  onSettings: () => void;
 }) {
   const statusColor =
     status === 'streaming' ? 'var(--nexus-accent-green)' :
@@ -217,6 +219,16 @@ function StatusBar({
       <div className="flex items-center gap-3">
         <span>{sessionCount} session{sessionCount !== 1 ? 's' : ''}</span>
         <span>Nexus {appVersion}</span>
+        <button
+          onClick={onSettings}
+          className="btn-ghost p-0.5 rounded opacity-60 hover:opacity-100 transition-opacity"
+          title="Settings (Cmd+,)"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </div>
     </footer>
   );
@@ -361,6 +373,144 @@ function MainContent({
   return <ChatView messages={messages} status={status} onSend={onSend} />;
 }
 
+function SettingsModal({ onClose }: { onClose: () => void }) {
+  const [apiKey, setApiKey] = useState('');
+  const [model, setModel] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    invoke('get_config').then((config: any) => {
+      if (config?.apiKey) setApiKey(config.apiKey);
+      setModel(config?.defaultModel || 'auto');
+    }).catch(() => {});
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (saved) {
+      const t = setTimeout(() => setSaved(false), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [saved]);
+
+  const handleSave = async () => {
+    try {
+      await invoke('update_config', { key: 'apiKey', value: apiKey });
+      await invoke('update_config', { key: 'defaultModel', value: model });
+      setSaved(true);
+      setTimeout(onClose, 1500);
+    } catch (e) {
+      console.error('Failed to save config:', e);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        ref={modalRef}
+        className="w-full max-w-md rounded-xl shadow-2xl border animate-scale-in"
+        style={{
+          backgroundColor: 'var(--nexus-bg-secondary)',
+          borderColor: 'var(--nexus-border-primary)',
+        }}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--nexus-border-primary)' }}>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--nexus-text-primary)' }}>Settings</h2>
+          <button onClick={onClose} className="btn-ghost p-1 rounded">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--nexus-text-secondary)' }}>
+              OpenRouter API Key
+            </label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
+                  placeholder="sk-or-v1-..."
+                  className="input w-full pr-8"
+                />
+                <button
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded opacity-50 hover:opacity-100 transition-opacity"
+                  style={{ color: 'var(--nexus-text-tertiary)' }}
+                >
+                  {showKey ? (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--nexus-text-secondary)' }}>
+              Model
+            </label>
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              className="input w-full"
+            >
+              <option value="auto">Auto (best available)</option>
+              <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4</option>
+              <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku</option>
+              <option value="openai/gpt-4o">GPT-4o</option>
+              <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+              <option value="google/gemini-2.5-pro-exp-03-25">Gemini 2.5 Pro</option>
+              <option value="deepseek/deepseek-chat">DeepSeek Chat</option>
+              <option value="qwen/qwq-32b">QwQ 32B</option>
+            </select>
+          </div>
+          <div className="text-xs" style={{ color: 'var(--nexus-text-tertiary)' }}>
+            Get your API key from{' '}
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); invoke('open_url', { url: 'https://openrouter.ai/keys' }); }}
+              style={{ color: 'var(--nexus-accent-blue)' }}
+            >openrouter.ai/keys</a>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t" style={{ borderColor: 'var(--nexus-border-primary)' }}>
+          {saved && (
+            <span className="text-xs animate-fade-in" style={{ color: 'var(--nexus-accent-green)' }}>
+              Saved
+            </span>
+          )}
+          <button onClick={onClose} className="btn-ghost text-xs px-3 py-1.5">
+            Cancel
+          </button>
+          <button onClick={handleSave} className="btn-primary text-xs px-3 py-1.5">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AppShell() {
   const nexus = useNexus();
   const project = useProject();
@@ -369,6 +519,7 @@ function AppShell() {
   const [mainView, setMainView] = useState<View>('chat');
   const [appVersion, setAppVersion] = useState('1.1.0');
   const [apiKeyStatus, setApiKeyStatus] = useState<'configured' | 'missing' | 'loading'>('loading');
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -390,6 +541,7 @@ function AppShell() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key === ',') { e.preventDefault(); setShowSettings(true); }
       if (meta && e.key === 'n') { e.preventDefault(); handleCreateSession(); }
       if (meta && e.key === 'w') {
         e.preventDefault();
@@ -454,7 +606,9 @@ function AppShell() {
         sessionCount={nexus.sessions.length}
         appVersion={appVersion}
         apiKeyStatus={apiKeyStatus}
+        onSettings={() => setShowSettings(true)}
       />
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   );
 }

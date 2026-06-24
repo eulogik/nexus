@@ -265,7 +265,7 @@ OpenRouter API (or other providers)
 - [x] Toggle between Sessions and Project tabs
 - [x] System tray (Close to tray, show on click, menu)
 - [ ] Streaming responses (current: full response on send)
-- [ ] Settings modal (API key config, model selection)
+- [x] Settings modal (API key config, model selection, Cmd+, shortcut)
 - [ ] Command palette (Cmd+K)
 - [ ] Diff viewer
 - [ ] Toast notifications
