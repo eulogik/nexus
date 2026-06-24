@@ -34,10 +34,9 @@ export function useProjects(): UseProjectsReturn {
       const project = await invoke<Project>('add_project', { path });
       setProjects(prev => [...prev, project]);
       setActiveProject(project);
-    } catch (e) {
-      console.error('Failed to add project:', e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const removeProject = useCallback(async (id: string) => {

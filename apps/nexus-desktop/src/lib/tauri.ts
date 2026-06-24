@@ -41,6 +41,15 @@ export async function openUrl(url: string): Promise<void> {
   }
 }
 
+export async function pickFolder(): Promise<string | null> {
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const result = await open({ directory: true, multiple: false });
+    return typeof result === 'string' ? result : null;
+  }
+  return null;
+}
+
 // ── Project File types ──
 export interface FileEntry {
   name: string;

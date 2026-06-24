@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { invoke, isTauri, type Session, type Message } from '../lib/tauri';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { invoke, listen, isTauri, type Session, type Message } from '../lib/tauri';
 
 interface UseNexusState {
   sessions: Session[];
@@ -7,6 +7,7 @@ interface UseNexusState {
   messages: Message[];
   status: 'idle' | 'loading' | 'streaming' | 'error';
   error: string | null;
+  streamingContent: string;
 }
 
 interface UseNexusReturn extends UseNexusState {
@@ -14,6 +15,7 @@ interface UseNexusReturn extends UseNexusState {
   selectSession: (id: string) => void;
   deleteSession: (id: string) => void;
   sendMessage: (content: string) => Promise<void>;
+  clearError: () => void;
 }
 
 export function useNexus(projectId: string | null): UseNexusReturn {
@@ -23,22 +25,78 @@ export function useNexus(projectId: string | null): UseNexusReturn {
     messages: [],
     status: 'idle',
     error: null,
+    streamingContent: '',
   });
+  const streamingRef = useRef('');
+  const streamDoneRef = useRef(false);
+  const activeSessionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeSessionRef.current = state.activeSessionId;
+  }, [state.activeSessionId]);
 
   const syncSessions = useCallback(async () => {
     if (!isTauri() || !projectId) {
-      setState(prev => ({ ...prev, sessions: [] }));
+      setState(prev => ({ ...prev, sessions: [], activeSessionId: null }));
       return;
     }
     try {
       const sessions = await invoke<Session[]>('list_sessions', { projectId });
-      setState(prev => ({ ...prev, sessions }));
+      setState(prev => {
+        const newActive = prev.activeSessionId ?? sessions[0]?.id ?? null;
+        return { ...prev, sessions, activeSessionId: newActive };
+      });
+      if (sessions.length === 0) {
+        setState(prev => ({ ...prev, messages: [], activeSessionId: null }));
+      }
     } catch {}
   }, [projectId]);
 
+  // Set up streaming listeners
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cleanup: (() => void)[] = [];
+
+    listen<string>('stream-token', (token) => {
+      if (streamDoneRef.current) return;
+      streamingRef.current += token;
+      setState(prev => ({ ...prev, streamingContent: streamingRef.current }));
+    }).then(unlisten => {
+      cleanup.push(unlisten);
+    });
+
+    listen('stream-done', () => {
+      streamDoneRef.current = true;
+      streamingRef.current = '';
+      setState(prev => ({ ...prev, status: 'idle', streamingContent: '' }));
+      const sId = activeSessionRef.current;
+      if (projectId && sId) {
+        invoke<Message[]>('get_session_messages', { projectId, sessionId: sId })
+          .then(messages => {
+            const filtered = messages.filter(m => m.role === 'user' || m.role === 'assistant');
+            setState(prev => ({ ...prev, messages: filtered }));
+          })
+          .catch(() => {});
+      }
+    }).then(unlisten => {
+      cleanup.push(unlisten);
+    });
+
+    listen('stream-error', (error) => {
+      streamDoneRef.current = true;
+      streamingRef.current = '';
+      setState(prev => ({ ...prev, status: 'error', error: String(error), streamingContent: '' }));
+    }).then(unlisten => {
+      cleanup.push(unlisten);
+    });
+
+    return () => {
+      cleanup.forEach(fn => fn());
+    };
+  }, []);
+
   useEffect(() => {
     syncSessions().then(() => {
-      // If there was a previously active session, check if it still exists
       setState(prev => {
         if (prev.activeSessionId && !prev.sessions.find(s => s.id === prev.activeSessionId)) {
           return { ...prev, activeSessionId: null, messages: [], status: 'idle' };
@@ -47,6 +105,17 @@ export function useNexus(projectId: string | null): UseNexusReturn {
       });
     });
   }, [syncSessions]);
+
+  // Load messages when active session changes
+  useEffect(() => {
+    if (!isTauri() || !projectId || !state.activeSessionId) return;
+    invoke<Message[]>('get_session_messages', { projectId, sessionId: state.activeSessionId })
+      .then(messages => {
+        const filtered = messages.filter(m => m.role === 'user' || m.role === 'assistant');
+        setState(prev => ({ ...prev, messages: filtered }));
+      })
+      .catch(() => {});
+  }, [projectId, state.activeSessionId]);
 
   const createSession = useCallback((name: string) => {
     if (!isTauri() || !projectId) return;
@@ -85,12 +154,16 @@ export function useNexus(projectId: string | null): UseNexusReturn {
   }, [syncSessions, projectId]);
 
   const sendMessage = useCallback(async (content: string) => {
-    if (!state.activeSessionId || !projectId) return;
-    setState(prev => ({ ...prev, status: 'streaming', error: null }));
+    const sId = activeSessionRef.current;
+    if (!sId || !projectId) return;
+    if (state.status === 'streaming') return;
+    streamDoneRef.current = false;
+    streamingRef.current = '';
+    setState(prev => ({ ...prev, status: 'streaming', error: null, streamingContent: '' }));
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
-      session_id: state.activeSessionId,
+      session_id: sId,
       role: 'user',
       content,
       timestamp: new Date().toISOString(),
@@ -112,16 +185,20 @@ export function useNexus(projectId: string | null): UseNexusReturn {
     }
 
     try {
-      const result = await invoke<Message>('send_message', {
+      await invoke('send_message', {
         projectId,
-        sessionId: state.activeSessionId,
+        sessionId: sId,
         content,
       });
-      setState(prev => ({ ...prev, messages: [...prev.messages, result], status: 'idle' }));
+      // messages reloaded from disk on stream-done
     } catch (err) {
       setState(prev => ({ ...prev, status: 'error', error: String(err) }));
     }
   }, [state.activeSessionId, projectId]);
+
+  const clearError = useCallback(() => {
+    setState(prev => ({ ...prev, error: null }));
+  }, []);
 
   return {
     ...state,
@@ -129,5 +206,6 @@ export function useNexus(projectId: string | null): UseNexusReturn {
     selectSession,
     deleteSession,
     sendMessage,
+    clearError,
   };
 }

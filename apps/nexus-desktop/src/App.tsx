@@ -1,11 +1,19 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ThemeProvider, useTheme } from './hooks/use-theme';
 import { useProjects } from './hooks/use-projects';
 import { useNexus } from './hooks/use-nexus';
-import { useProject, type ProjectFile } from './hooks/use-project';
 import { useToast, ToastProvider } from './hooks/use-toast';
-import { isTauri, getAppInfo, invoke, openUrl } from './lib/tauri';
+import { isTauri, getAppInfo, invoke, openUrl, pickFolder, type FileEntry } from './lib/tauri';
 import type { Session, Message as NexusMessage } from './lib/tauri';
+
+interface ProjectFile {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+}
 
 function messageContent(msg: NexusMessage): string {
   return msg.content ?? '';
@@ -21,13 +29,12 @@ function Sidebar({
   onSelectSession,
   onCreateSession,
   onDeleteSession,
-  projectFiles,
-  selectedFile,
-  onSelectFile,
-  onNavigateDir,
   onAddProject,
-  loading,
   onSelectProject,
+  onRemoveProject,
+  onFileSelect,
+  selectedFile,
+  fileContent,
 }: {
   projects: { id: string; name: string; path: string }[];
   activeProject: { id: string; name: string; path: string } | null;
@@ -36,53 +43,175 @@ function Sidebar({
   onSelectSession: (id: string) => void;
   onCreateSession: () => void;
   onDeleteSession: (id: string) => void;
-  projectFiles: ProjectFile[];
-  selectedFile: ProjectFile | null;
-  onSelectFile: (file: ProjectFile) => void;
-  onNavigateDir: (dir: string) => void;
   onAddProject: () => void;
-  loading: boolean;
   onSelectProject: (id: string) => void;
+  onRemoveProject: (id: string) => void;
+  onFileSelect: (file: ProjectFile | null, content: string | null) => void;
+  selectedFile: ProjectFile | null;
+  fileContent: string | null;
 }) {
   const [sessionsOpen, setSessionsOpen] = useState(true);
   const [filesOpen, setFilesOpen] = useState(true);
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+  const [dirContents, setDirContents] = useState<Record<string, ProjectFile[]>>({});
+  const [dirLoading, setDirLoading] = useState<Set<string>>(new Set());
 
-  const renderFileTree = (items: ProjectFile[], depth: number = 0) => {
-    return items.map(item => (
-      <div
-        key={item.path}
-        className="group flex items-center gap-2 cursor-pointer text-xs transition-all rounded-sm"
-        style={{
-          paddingLeft: 12 + depth * 12,
-          paddingTop: 4,
-          paddingBottom: 4,
-          paddingRight: 8,
-          backgroundColor: selectedFile?.path === item.path ? 'var(--nexus-bg-elevated)' : 'transparent',
-          color: selectedFile?.path === item.path ? 'var(--nexus-text-primary)' : 'var(--nexus-text-secondary)',
-        }}
-        onClick={() => {
-          if (item.is_dir) {
-            onNavigateDir(item.path);
-          } else {
-            onSelectFile(item);
-          }
-        }}
-        onMouseEnter={e => { if (selectedFile?.path !== item.path) e.currentTarget.style.backgroundColor = 'var(--nexus-bg-tertiary)'; }}
-        onMouseLeave={e => { if (selectedFile?.path !== item.path) e.currentTarget.style.backgroundColor = 'transparent'; }}
-      >
-        {item.is_dir ? (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--nexus-accent-blue)', flexShrink: 0 }}>
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          </svg>
+  const loadDir = useCallback(async (dir: string) => {
+    if (!isTauri() || !activeProject) return;
+    setDirLoading(prev => new Set(prev).add(dir));
+    try {
+      const entries = await invoke<FileEntry[]>('list_project_files', {
+        projectId: activeProject.id,
+        dir,
+      });
+      const mapped = entries.map((e: FileEntry) => ({
+        name: e.name,
+        path: e.path,
+        is_dir: e.is_dir,
+        size: e.size,
+      }));
+      setDirContents(prev => ({ ...prev, [dir]: mapped }));
+    } catch {
+      setDirContents(prev => ({ ...prev, [dir]: [] }));
+    }
+    setDirLoading(prev => { const next = new Set(prev); next.delete(dir); return next; });
+  }, [activeProject]);
+
+  useEffect(() => {
+    setExpandedDirs(new Set());
+    setDirContents({});
+    loadDir('');
+  }, [loadDir]);
+
+  const toggleDir = useCallback((dir: string) => {
+    setExpandedDirs(prev => {
+      const next = new Set(prev);
+      if (next.has(dir)) {
+        next.delete(dir);
+      } else {
+        next.add(dir);
+        if (!dirContents[dir]) loadDir(dir);
+      }
+      return next;
+    });
+  }, [loadDir, dirContents]);
+
+  const selectFile = useCallback(async (file: ProjectFile) => {
+    onFileSelect(file, null);
+    if (!file.is_dir && isTauri() && activeProject) {
+      try {
+        const content = await invoke<string>('read_project_file', { projectId: activeProject.id, filePath: file.path });
+        onFileSelect(file, content);
+      } catch {
+        onFileSelect(file, '// Error reading file');
+      }
+    }
+  }, [activeProject, onFileSelect]);
+
+  useEffect(() => { onFileSelect(null, null); }, [activeProject?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const renderFileTree = (dir: string, depth: number = 0): React.ReactNode => {
+    const items = dirContents[dir] || [];
+    const loading = dirLoading.has(dir);
+    const expanded = expandedDirs.has(dir);
+
+    const dirName = dir ? dir.split('/').pop() || dir : activeProject?.name || 'root';
+
+    if (depth > 0) {
+      return (
+        <div key={dir}>
+          <div
+            className="group flex items-center gap-1.5 cursor-pointer text-xs transition-all rounded-sm"
+            style={{
+              paddingLeft: 12 + (depth - 1) * 12,
+              paddingTop: 4,
+              paddingBottom: 4,
+              paddingRight: 8,
+              color: 'var(--nexus-text-secondary)',
+            }}
+            onClick={() => toggleDir(dir)}
+          >
+            <svg
+              width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', flexShrink: 0, color: 'var(--nexus-text-tertiary)' }}
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--nexus-accent-blue)', flexShrink: 0 }}>
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+            <span className="truncate flex-1">{dirName}</span>
+            {loading && <span className="w-3 h-3 rounded-full animate-spin" style={{ border: '2px solid var(--nexus-border-primary)', borderTopColor: 'var(--nexus-accent-blue)' }} />}
+          </div>
+          {expanded && (
+            <div>
+              {loading && depth === 0 ? (
+                <div className="px-4 py-2 text-xs" style={{ color: 'var(--nexus-text-tertiary)' }}>Loading...</div>
+              ) : items.length === 0 && !loading ? (
+                <div className="text-[10px] pl-[60px] py-1" style={{ color: 'var(--nexus-text-tertiary)' }}>Empty</div>
+              ) : (
+                items.map(item => item.is_dir ? renderFileTree(item.path, depth + 1) : (
+                  <div
+                    key={item.path}
+                    className="group flex items-center gap-2 cursor-pointer text-xs transition-all rounded-sm"
+                    style={{
+                      paddingLeft: 12 + depth * 12,
+                      paddingTop: 3,
+                      paddingBottom: 3,
+                      paddingRight: 8,
+                      backgroundColor: selectedFile?.path === item.path ? 'var(--nexus-bg-elevated)' : 'transparent',
+                      color: selectedFile?.path === item.path ? 'var(--nexus-text-primary)' : 'var(--nexus-text-secondary)',
+                    }}
+                    onClick={() => selectFile(item)}
+                    onMouseEnter={e => { if (selectedFile?.path !== item.path) e.currentTarget.style.backgroundColor = 'var(--nexus-bg-tertiary)'; }}
+                    onMouseLeave={e => { if (selectedFile?.path !== item.path) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--nexus-accent-purple)', flexShrink: 0 }}>
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+                    </svg>
+                    <span className="truncate">{item.name}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Root level (depth === 0)
+    return (
+      <div>
+        {loading ? (
+          <div className="px-4 py-3 text-xs" style={{ color: 'var(--nexus-text-tertiary)' }}>Loading...</div>
+        ) : items.length === 0 ? (
+          <div className="px-4 py-3 text-xs" style={{ color: 'var(--nexus-text-tertiary)' }}>No files</div>
         ) : (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--nexus-accent-purple)', flexShrink: 0 }}>
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
+          items.map(item => item.is_dir ? renderFileTree(item.path, 1) : (
+            <div
+              key={item.path}
+              className="group flex items-center gap-2 cursor-pointer text-xs transition-all rounded-sm"
+              style={{
+                paddingLeft: 24,
+                paddingTop: 3,
+                paddingBottom: 3,
+                paddingRight: 8,
+                backgroundColor: selectedFile?.path === item.path ? 'var(--nexus-bg-elevated)' : 'transparent',
+                color: selectedFile?.path === item.path ? 'var(--nexus-text-primary)' : 'var(--nexus-text-secondary)',
+              }}
+              onClick={() => selectFile(item)}
+              onMouseEnter={e => { if (selectedFile?.path !== item.path) e.currentTarget.style.backgroundColor = 'var(--nexus-bg-tertiary)'; }}
+              onMouseLeave={e => { if (selectedFile?.path !== item.path) e.currentTarget.style.backgroundColor = 'transparent'; }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--nexus-accent-purple)', flexShrink: 0 }}>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+              </svg>
+              <span className="truncate">{item.name}</span>
+            </div>
+          ))
         )}
-        <span className="truncate">{item.name}</span>
       </div>
-    ));
+    );
   };
 
   return (
@@ -125,19 +254,27 @@ function Sidebar({
 
       {/* Project switcher */}
       {projects.length > 1 && (
-        <div className="flex gap-1 px-3 py-2 border-b flex-wrap" style={{ borderColor: 'var(--nexus-border-primary)' }}>
+        <div className="flex gap-1 px-3 py-2 border-b flex-wrap items-center" style={{ borderColor: 'var(--nexus-border-primary)' }}>
           {projects.map(p => (
-            <button
+            <span
               key={p.id}
-              onClick={() => onSelectProject(p.id)}
-              className="text-[11px] px-2 py-0.5 rounded transition-all"
+              className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded transition-all cursor-pointer group"
               style={{
                 backgroundColor: activeProject?.id === p.id ? 'var(--nexus-bg-elevated)' : 'transparent',
                 color: activeProject?.id === p.id ? 'var(--nexus-text-primary)' : 'var(--nexus-text-tertiary)',
               }}
+              onClick={() => onSelectProject(p.id)}
             >
               {p.name}
-            </button>
+              <button
+                onClick={e => { e.stopPropagation(); onRemoveProject(p.id); }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 hover:text-[var(--nexus-status-error)]"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </span>
           ))}
         </div>
       )}
@@ -229,13 +366,7 @@ function Sidebar({
 
           {filesOpen && (
             <div className="overflow-y-auto pb-2" style={{ flex: '1 1 0%', minHeight: 0 }}>
-              {loading ? (
-                <div className="px-4 py-3 text-xs" style={{ color: 'var(--nexus-text-tertiary)' }}>Loading...</div>
-              ) : projectFiles.length === 0 ? (
-                <div className="px-4 py-3 text-xs" style={{ color: 'var(--nexus-text-tertiary)' }}>No files</div>
-              ) : (
-                renderFileTree(projectFiles)
-              )}
+              {renderFileTree('', 0)}
             </div>
           )}
         </div>
@@ -377,22 +508,45 @@ function ChatView({
   messages,
   status,
   onSend,
+  streamingContent,
 }: {
   messages: NexusMessage[];
   status: string;
   onSend: (content: string) => void;
+  streamingContent?: string;
 }) {
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, streamingContent]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (status !== 'streaming') {
+      inputRef.current?.focus();
+    }
+  }, [status, messages.length]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 150) + 'px';
+    }
+  }, [input]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  const handleSubmit = () => {
     if (!input.trim() || status === 'streaming') return;
     onSend(input.trim());
     setInput('');
@@ -419,11 +573,30 @@ function ChatView({
                 color: 'var(--nexus-text-primary)',
               }}
             >
-              <div className="whitespace-pre-wrap break-words">{messageContent(msg)}</div>
+              <div className="markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageContent(msg)}</ReactMarkdown>
+              </div>
             </div>
           </div>
         ))}
-        {status === 'streaming' && (
+        {status === 'streaming' && streamingContent && (
+          <div className="flex justify-start animate-fade-in">
+            <div
+              className="max-w-[80%] rounded-xl px-4 py-3 text-sm leading-relaxed rounded-bl-sm"
+              style={{
+                backgroundColor: 'var(--nexus-bg-secondary)',
+                border: '1px solid var(--nexus-border-primary)',
+                color: 'var(--nexus-text-primary)',
+              }}
+            >
+              <div className="markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingContent}</ReactMarkdown>
+              </div>
+              <span className="inline-block w-1.5 h-4 ml-0.5 animate-pulse" style={{ backgroundColor: 'var(--nexus-accent-blue)' }} />
+            </div>
+          </div>
+        )}
+        {status === 'streaming' && !streamingContent && (
           <div className="flex justify-start animate-fade-in">
             <div className="card px-4 py-3">
               <div className="flex gap-1.5">
@@ -437,23 +610,25 @@ function ChatView({
       </div>
 
       <div className="px-6 py-3 border-t" style={{ borderColor: 'var(--nexus-border-primary)' }}>
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            type="text"
+        <div className="flex gap-2">
+          <textarea
+            ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Ask Nexus to help with your code..."
+            onKeyDown={handleKeyDown}
+            placeholder="Ask Nexus to help with your code... (Shift+Enter for new line)"
             disabled={status === 'streaming'}
-            className="input"
-            autoFocus
+            rows={1}
+            className="input resize-none overflow-y-auto"
+            style={{ maxHeight: '150px' }}
           />
-          <button type="submit" disabled={!input.trim() || status === 'streaming'} className="btn-primary">
+          <button type="button" onClick={() => handleSubmit()} disabled={!input.trim() || status === 'streaming'} className="btn-primary">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
             </svg>
             Send
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );
@@ -468,38 +643,39 @@ function SettingsModal({ onClose, onApiKeyChange }: { onClose: () => void; onApi
   const [maxIterations, setMaxIterations] = useState(50);
   const [showKey, setShowKey] = useState(false);
   const [saved, setSaved] = useState(false);
-  const modalRef = useRef<HTMLDivElement>(null);
+
+  const onCloseRef = useRef(onClose);
+  const onApiKeyChangeRef = useRef(onApiKeyChange);
+  onCloseRef.current = onClose;
+  onApiKeyChangeRef.current = onApiKeyChange;
 
   useEffect(() => {
     invoke('get_config').then((config: any) => {
-      if (config?.apiKey) setApiKey(config.apiKey);
-      setModel(config?.model || 'auto');
-      setApprovalLevel(config?.approvalLevel || 'ask');
-      setMaxIterations(config?.maxIterations || 50);
+      if (config) {
+        setApiKey(config.apiKey ?? '');
+        setModel(config.model ?? 'auto');
+        setApprovalLevel(config.approvalLevel ?? 'ask');
+        setMaxIterations(config.maxIterations ?? 50);
+      }
     }).catch(() => {});
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
-  useEffect(() => {
-    if (saved) {
-      const t = setTimeout(() => setSaved(false), 2000);
-      return () => clearTimeout(t);
-    }
-  }, [saved]);
+  }, []);
 
   const handleSave = async () => {
     try {
-      await invoke('update_config', { key: 'apiKey', value: JSON.stringify(apiKey) });
-      await invoke('update_config', { key: 'model', value: JSON.stringify(model) });
-      await invoke('update_config', { key: 'approvalLevel', value: JSON.stringify(approvalLevel) });
-      await invoke('update_config', { key: 'maxIterations', value: JSON.stringify(maxIterations) });
+      await invoke('save_settings', {
+        apiKey,
+        model,
+        approvalLevel,
+        maxIterations: Number(maxIterations),
+      });
       setSaved(true);
-      onApiKeyChange?.();
-      setTimeout(onClose, 1200);
+      onApiKeyChangeRef.current?.();
+      setTimeout(() => onCloseRef.current(), 1200);
     } catch (e) {
       console.error('Failed to save config:', e);
     }
@@ -512,7 +688,6 @@ function SettingsModal({ onClose, onApiKeyChange }: { onClose: () => void; onApi
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        ref={modalRef}
         className="w-full max-w-lg rounded-xl shadow-2xl border animate-scale-in"
         style={{
           backgroundColor: 'var(--nexus-bg-secondary)',
@@ -663,10 +838,18 @@ function AddProjectModal({ onClose, onAdd }: { onClose: () => void; onAdd: (path
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
+  const handleBrowse = async () => {
+    const result = await pickFolder();
+    if (result) {
+      setPath(result);
+      setError('');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!path.trim()) {
-      setError('Please enter a path');
+      setError('Please enter or browse for a path');
       return;
     }
     setError('');
@@ -697,19 +880,32 @@ function AddProjectModal({ onClose, onAdd }: { onClose: () => void; onAdd: (path
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--nexus-text-secondary)' }}>
-              Project directory path
+              Project directory
             </label>
-            <input
-              type="text"
-              value={path}
-              onChange={e => { setPath(e.target.value); setError(''); }}
-              placeholder="/Users/name/projects/my-app"
-              className="input w-full text-xs"
-              autoFocus
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={path}
+                onChange={e => { setPath(e.target.value); setError(''); }}
+                placeholder="/Users/name/projects/my-app"
+                className="input flex-1 text-xs"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={handleBrowse}
+                className="btn-ghost text-xs px-3 py-1.5 flex-shrink-0"
+                style={{ border: '1px solid var(--nexus-border-primary)' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                </svg>
+                Browse
+              </button>
+            </div>
             {error && <p className="text-xs mt-1" style={{ color: 'var(--nexus-accent-red)' }}>{error}</p>}
             <p className="text-[10px] mt-1" style={{ color: 'var(--nexus-text-tertiary)' }}>
-              Enter the absolute path to your project directory
+              Select a project folder or type the path manually
             </p>
           </div>
           <div className="flex justify-end gap-2">
@@ -935,7 +1131,6 @@ function AppShell() {
   const projectId = activeProject?.id || null;
 
   const nexus = useNexus(projectId);
-  const project = useProject(projectId);
   const { theme } = useTheme();
   const { addToast } = useToast();
 
@@ -948,6 +1143,15 @@ function AppShell() {
   const [showDiff, setShowDiff] = useState(false);
   const [fullDiff, setFullDiff] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
+  const [sidebarFile, setSidebarFile] = useState<ProjectFile | null>(null);
+  const [sidebarFileContent, setSidebarFileContent] = useState<string | null>(null);
+
+  const handleSidebarFileSelect = useCallback((file: ProjectFile | null, content: string | null) => {
+    setSidebarFile(file);
+    setSidebarFileContent(content);
+    if (file && !file.is_dir) setMainView('file');
+    else setMainView('chat');
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -971,14 +1175,12 @@ function AppShell() {
       .catch(() => setApiKeyStatus('missing'));
   }, [showSettings]);
 
-  // Update view when file is selected
+  // Update view when session changes
   useEffect(() => {
-    if (project.selectedFile && !project.selectedFile.is_dir) {
-      setMainView('file');
-    } else if (!nexus.activeSessionId) {
+    if (!nexus.activeSessionId && !sidebarFile) {
       setMainView('chat');
     }
-  }, [project.selectedFile, nexus.activeSessionId]);
+  }, [nexus.activeSessionId, sidebarFile]);
 
   const handleCreateSession = useCallback(() => {
     const name = `Session ${nexus.sessions.length + 1}`;
@@ -987,15 +1189,29 @@ function AppShell() {
   }, [nexus, addToast]);
 
   const handleAddProject = useCallback(async (path: string) => {
-    await projectsManager.addProject(path);
-    setShowAddProject(false);
-    addToast('success', 'Project added');
+    try {
+      await projectsManager.addProject(path);
+      setShowAddProject(false);
+      addToast('success', 'Project added');
+    } catch (e) {
+      addToast('error', String(e));
+    }
+  }, [projectsManager, addToast]);
+
+  const handleRemoveProject = useCallback(async (id: string) => {
+    try {
+      await projectsManager.removeProject(id);
+      addToast('success', 'Project removed');
+    } catch (e) {
+      addToast('error', String(e));
+    }
   }, [projectsManager, addToast]);
 
   // Show toasts for errors
   useEffect(() => {
     if (nexus.error) {
       addToast('error', nexus.error);
+      nexus.clearError();
     }
   }, [nexus.error, addToast]);
 
@@ -1017,10 +1233,13 @@ function AppShell() {
       case 'new-session': handleCreateSession(); break;
       case 'settings': setShowSettings(true); break;
       case 'add-project': setShowAddProject(true); break;
-      case 'close-session': addToast('info', 'Session closed'); if (nexus.activeSessionId) nexus.deleteSession(nexus.activeSessionId); break;
+      case 'close-session':
+        if (sidebarFile) { handleSidebarFileSelect(null, null); setMainView('chat'); }
+        else if (nexus.activeSessionId) { nexus.deleteSession(nexus.activeSessionId); addToast('info', 'Session closed'); }
+        break;
       case 'view-diff': setShowDiff(true); loadDiff(); break;
     }
-  }, [handleCreateSession, nexus, loadDiff, addToast]);
+  }, [handleCreateSession, nexus, loadDiff, addToast, sidebarFile, handleSidebarFileSelect]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1032,10 +1251,15 @@ function AppShell() {
         e.preventDefault();
         if (nexus.activeSessionId) nexus.deleteSession(nexus.activeSessionId);
       }
+      else if (e.key === 'Escape' && sidebarFile) {
+        e.preventDefault();
+        handleSidebarFileSelect(null, null);
+        setMainView('chat');
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleCreateSession, nexus]);
+  }, [handleCreateSession, nexus, sidebarFile, handleSidebarFileSelect]);
 
   return (
     <div className="flex flex-col h-screen" style={{ backgroundColor: 'var(--nexus-bg-primary)' }}>
@@ -1048,13 +1272,12 @@ function AppShell() {
           onSelectSession={nexus.selectSession}
           onCreateSession={handleCreateSession}
           onDeleteSession={nexus.deleteSession}
-          projectFiles={project.files}
-          selectedFile={project.selectedFile}
-          onSelectFile={project.selectFile}
-          onNavigateDir={project.navigateToDir}
           onAddProject={() => setShowAddProject(true)}
-          loading={project.loading}
-          onSelectProject={(id) => { projectsManager.selectProject(id); project.navigateToDir(''); }}
+          onSelectProject={(id) => { projectsManager.selectProject(id); }}
+          onRemoveProject={handleRemoveProject}
+          onFileSelect={handleSidebarFileSelect}
+          selectedFile={sidebarFile}
+          fileContent={sidebarFileContent}
         />
 
         <main className="flex-1 flex flex-col overflow-hidden">
@@ -1087,12 +1310,12 @@ function AppShell() {
             ) : (
               <DiffViewer diff={fullDiff} onClose={() => setShowDiff(false)} filename={`${activeProject?.name || 'Project'} changes`} />
             )
-          ) : mainView === 'file' && project.selectedFile ? (
-            <FileView file={project.selectedFile} content={project.fileContent} />
+          ) : mainView === 'file' && sidebarFile ? (
+            <FileView file={sidebarFile} content={sidebarFileContent} />
           ) : !nexus.activeSessionId ? (
             <EmptyState onCreate={handleCreateSession} projectName={activeProject?.name || null} />
           ) : (
-            <ChatView messages={nexus.messages} status={nexus.status} onSend={nexus.sendMessage} />
+            <ChatView messages={nexus.messages} status={nexus.status} onSend={nexus.sendMessage} streamingContent={nexus.streamingContent} />
           )}
         </main>
       </div>

@@ -71,9 +71,19 @@ pub struct CostBreakdown {
 // ---------------------------------------------------------------------------
 
 fn nexus_dir() -> PathBuf {
-    std::env::current_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(".nexus")
+    if cfg!(target_os = "macos") {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Library/Application Support/nexus")
+    } else if cfg!(target_os = "windows") {
+        dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("nexus")
+    } else {
+        dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("nexus")
+    }
 }
 
 fn projects_dir() -> PathBuf {
@@ -195,6 +205,26 @@ fn load_messages(proj_id: &str, sess_id: &str) -> Vec<Message> {
         .unwrap_or_default()
 }
 
+fn load_session_meta(proj_id: &str, sess_id: &str) -> Session {
+    let path = session_path(proj_id, sess_id);
+    if path.exists() {
+        if let Ok(content) = fs::read_to_string(&path) {
+            if let Ok(sf) = serde_json::from_str::<serde_json::Value>(&content) {
+                return Session {
+                    id: sf["id"].as_str().unwrap_or(sess_id).to_string(),
+                    name: sf["name"].as_str().unwrap_or("Session").to_string(),
+                    created_at: sf["created_at"].as_str().unwrap_or("").to_string(),
+                };
+            }
+        }
+    }
+    Session {
+        id: sess_id.to_string(),
+        name: "Session".to_string(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+    }
+}
+
 fn save_session(proj_id: &str, session: &Session, messages: &[Message]) -> std::io::Result<()> {
     ensure_dir(&sessions_dir(proj_id))?;
     #[derive(Serialize)]
@@ -235,15 +265,137 @@ fn read_config() -> serde_json::Value {
 }
 
 // ---------------------------------------------------------------------------
-// LLM Bridge
+// Project context for LLM
 // ---------------------------------------------------------------------------
 
-async fn call_bridge_chat(
+fn collect_project_context(project_path: &str) -> String {
+    let mut context = String::new();
+    context.push_str(&format!("## Project Directory\n{}\n\n", project_path));
+
+    // Try to read README
+    let readme_paths = ["README.md", "README", "readme.md", "README.txt"];
+    for readme in &readme_paths {
+        let readme_path = PathBuf::from(project_path).join(readme);
+        if let Ok(content) = fs::read_to_string(&readme_path) {
+            let truncated = if content.len() > 3000 {
+                format!("{}...(truncated)", &content[..3000])
+            } else {
+                content
+            };
+            context.push_str(&format!("## Project README ({})\n{}\n\n", readme, truncated));
+            break;
+        }
+    }
+
+    // Collect file tree (shallow, 2 levels)
+    context.push_str("## Project Structure\n```\n");
+    if let Ok(entries) = fs::read_dir(project_path) {
+        let mut entries: Vec<_> = entries.flatten().collect();
+        entries.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+        for (i, entry) in entries.iter().enumerate() {
+            if i >= 30 {
+                context.push_str("... (truncated)\n");
+                break;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') && name != ".nexus.md" {
+                continue;
+            }
+            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+            if is_dir {
+                context.push_str(&format!("{}/\n", name));
+                // Show 1 level of children
+                if let Ok(sub) = fs::read_dir(entry.path()) {
+                    for (j, sub_entry) in sub.flatten().enumerate() {
+                        if j >= 10 {
+                            context.push_str("  ...\n");
+                            break;
+                        }
+                        let sub_name = sub_entry.file_name().to_string_lossy().to_string();
+                        if sub_name.starts_with('.') {
+                            continue;
+                        }
+                        let sub_is_dir = sub_entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                        if sub_is_dir {
+                            context.push_str(&format!("  {}/\n", sub_name));
+                        } else {
+                            context.push_str(&format!("  {}\n", sub_name));
+                        }
+                    }
+                }
+            } else {
+                context.push_str(&format!("{}\n", name));
+            }
+        }
+    }
+    context.push_str("```\n");
+
+    context
+}
+
+fn estimate_tokens(text: &str) -> usize {
+    text.chars().count() / 4
+}
+
+fn compress_messages(messages: Vec<Message>, max_tokens: usize) -> Vec<Message> {
+    if messages.is_empty() {
+        return messages;
+    }
+
+    let system_msg = messages[0].clone();
+    let mut other_messages: Vec<Message> = messages[1..].to_vec();
+
+    let system_tokens = estimate_tokens(&system_msg.content);
+    let budget = max_tokens.saturating_sub(system_tokens + 1000);
+
+    if budget == 0 {
+        return vec![system_msg];
+    }
+
+    let mut kept = Vec::new();
+    let mut current_tokens = 0;
+
+    while let Some(msg) = other_messages.pop() {
+        let msg_tokens = estimate_tokens(&msg.content);
+        if current_tokens + msg_tokens <= budget {
+            current_tokens += msg_tokens;
+            kept.push(msg);
+        }
+    }
+
+    kept.reverse();
+
+    if kept.len() < messages.len() - 1 {
+        let summary = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            session_id: system_msg.session_id.clone(),
+            role: "user".to_string(),
+            content: "[Previous conversation summary] Earlier messages were compressed to fit context window.".to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+        let mut result = vec![system_msg];
+        result.push(summary);
+        result.extend(kept);
+        result
+    } else {
+        let mut result = vec![system_msg];
+        result.extend(kept);
+        result
+    }
+}
+
+// ---------------------------------------------------------------------------
+// LLM Bridge
+// ---------------------------------------------------------------------------
+// LLM Bridge (external Node script using nexus-core AgentLoop)
+// ---------------------------------------------------------------------------
+
+async fn call_bridge_stream(
+    app: &AppHandle,
     proj_id: &str,
     sess_id: &str,
     content: &str,
 ) -> Result<String, String> {
-    let cwd = std::env::current_dir().map_err(|e| format!("cwd error: {}", e))?;
     let config = read_config();
     let api_key = config["apiKey"].as_str().unwrap_or("").to_string();
 
@@ -251,65 +403,145 @@ async fn call_bridge_chat(
         return Err("No API key configured.".to_string());
     }
 
-    let sp = session_path(proj_id, sess_id);
-    let mut messages =
-        vec![serde_json::json!({"role": "system", "content": "You are Nexus, a helpful coding assistant."})];
+    let project_path = {
+        let pf = project_file(proj_id);
+        if let Ok(data) = fs::read_to_string(&pf) {
+            if let Ok(p) = serde_json::from_str::<Project>(&data) {
+                p.path
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        }
+    };
 
-    if sp.exists() {
-        if let Ok(data) = fs::read_to_string(&sp) {
-            if let Ok(sf) = serde_json::from_str::<serde_json::Value>(&data) {
-                if let Some(msgs) = sf["messages"].as_array() {
-                    for m in msgs {
-                        if let (Some(role), Some(c)) = (m["role"].as_str(), m["content"].as_str())
-                        {
-                            messages.push(serde_json::json!({"role": role, "content": c}));
-                        }
+    if project_path.is_empty() {
+        return Err("Project not found".to_string());
+    }
+
+    let model = config["model"].as_str().unwrap_or("openai/gpt-4o-mini");
+    let bridge_path = std::env::current_dir()
+        .map_err(|e| format!("cwd error: {}", e))?
+        .join("bridge.mjs");
+
+    let args = serde_json::json!({
+        "projectId": proj_id,
+        "sessionId": sess_id,
+        "projectPath": project_path,
+        "content": content,
+        "apiKey": api_key,
+        "model": model,
+    });
+
+    let args_str = serde_json::to_string(&args)
+        .map_err(|e| format!("JSON error: {}", e))?;
+
+    let mut child = Command::new("node")
+        .arg(&bridge_path)
+        .arg(args_str)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn bridge: {}", e))?;
+
+    let stdout = child.stdout.take()
+        .ok_or_else(|| "Failed to capture stdout".to_string())?;
+
+    use tokio::io::AsyncBufReadExt;
+    let reader = tokio::io::BufReader::new(stdout);
+    let mut lines = reader.lines();
+    let mut full_content = String::new();
+
+    while let Ok(Some(line)) = lines.next_line().await {
+        if line.starts_with('{') {
+            if let Ok(evt) = serde_json::from_str::<serde_json::Value>(&line) {
+                match evt["type"].as_str() {
+                    Some("stream-token") => {
+                        let token = evt["data"].as_str().unwrap_or("");
+                        full_content.push_str(token);
+                        let _ = app.emit("stream-token", token);
                     }
+                    Some("approval-needed") => {
+                        let _ = app.emit("approval-needed", &evt["data"]);
+                    }
+                    Some("stream-success") => {
+                        let _ = app.emit("stream-done", &evt["data"]);
+                    }
+                    Some("stream-error") => {
+                        let _ = app.emit("stream-error", &evt["data"]);
+                    }
+                    _ => {}
                 }
             }
+        } else if !line.is_empty() {
+            full_content.push_str(&line);
+            full_content.push('\n');
+            let _ = app.emit("stream-token", &line);
         }
     }
 
-    messages.push(serde_json::json!({"role": "user", "content": content}));
+    let status = child.wait().await.map_err(|e| format!("Wait error: {}", e))?;
 
-    let model = config["model"].as_str().unwrap_or("auto");
-    let request = serde_json::json!({
-        "model": model,
-        "messages": messages,
-        "temperature": 0.3,
-        "max_tokens": 4096,
+    if !status.success() {
+        let stderr = child.stderr.take()
+            .map(|s| {
+                let mut buf = String::new();
+                use tokio::io::AsyncReadExt;
+                let _ = tokio::io::BufReader::new(s).read_to_string(&mut buf);
+                buf
+            })
+            .unwrap_or_default();
+        if full_content.is_empty() {
+            return Err(format!("Bridge error: {}", stderr.trim()));
+        }
+    }
+
+    Ok(full_content)
+}
+
+#[tauri::command]
+async fn send_message(
+    app: AppHandle,
+    project_id: String,
+    session_id: String,
+    content: String,
+) -> Result<(), String> {
+    let mut messages = load_messages(&project_id, &session_id);
+
+    let user_msg = Message {
+        id: uuid::Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        role: "user".to_string(),
+        content: content.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+    messages.push(user_msg.clone());
+
+    let session = load_session_meta(&project_id, &session_id);
+    // Save user message immediately
+    save_session(&project_id, &session, &messages)
+        .map_err(|e| format!("Failed to save: {}", e))?;
+
+    // Spawn streaming
+    let app_clone = app.clone();
+    let proj_id = project_id.clone();
+    let sess_id = session_id.clone();
+    let content_clone = content.clone();
+    let session_clone = session;
+
+    tokio::spawn(async move {
+        match call_bridge_stream(&app_clone, &proj_id, &sess_id, &content_clone).await {
+            Ok(_full_content) => {
+                let _ = app_clone.emit("stream-done", &true);
+            }
+            Err(e) => {
+                let _ = app_clone.emit("stream-error", &e);
+            }
+        }
     });
 
-    let esc_body = serde_json::to_string(&request).map_err(|e| format!("JSON error: {}", e))?;
-    let esc_key = serde_json::to_string(&api_key).map_err(|e| format!("JSON error: {}", e))?;
-
-    let js_code = format!(
-        r#"const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {{
-  method: 'POST',
-  headers: {{ 'Authorization': 'Bearer ' + {key}, 'Content-Type': 'application/json' }},
-  body: {body}
-}});
-if (!r.ok) {{ const t = await r.text(); throw new Error(r.status + ' ' + t); }}
-const j = await r.json();
-process.stdout.write(j.choices[0].message.content || '');"#,
-        key = esc_key,
-        body = esc_body
-    );
-
-    let output = Command::new("node")
-        .args(["--input-type=module", "-e", &js_code])
-        .current_dir(&cwd)
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run node: {}", e))?;
-
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(stdout.trim().to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("Node error: {}", stderr.trim()))
-    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -361,6 +593,17 @@ async fn add_project(path: String) -> Result<Project, String> {
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     save_project(&project).map_err(|e| format!("Failed to save project: {}", e))?;
+
+    // Auto-create first session
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let session = Session {
+        id: session_id.clone(),
+        name: "Session 1".to_string(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    save_session(&project.id, &session, &[])
+        .map_err(|e| format!("Failed to create session: {}", e))?;
+
     Ok(project)
 }
 
@@ -410,50 +653,6 @@ async fn get_session_messages(
     session_id: String,
 ) -> Result<Vec<Message>, String> {
     Ok(load_messages(&project_id, &session_id))
-}
-
-#[tauri::command]
-async fn send_message(
-    project_id: String,
-    session_id: String,
-    content: String,
-) -> Result<Message, String> {
-    let mut messages = load_messages(&project_id, &session_id);
-
-    let user_msg = Message {
-        id: uuid::Uuid::new_v4().to_string(),
-        session_id: session_id.clone(),
-        role: "user".to_string(),
-        content: content.clone(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    };
-    messages.push(user_msg.clone());
-
-    let assistant_content = match call_bridge_chat(&project_id, &session_id, &content).await {
-        Ok(resp) => resp,
-        Err(e) => {
-            format!("_{}_", e)
-        }
-    };
-
-    let assistant_msg = Message {
-        id: uuid::Uuid::new_v4().to_string(),
-        session_id: session_id.clone(),
-        role: "assistant".to_string(),
-        content: assistant_content,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    };
-    messages.push(assistant_msg.clone());
-
-    let session = Session {
-        id: session_id.clone(),
-        name: "Session".to_string(),
-        created_at: chrono::Utc::now().to_rfc3339(),
-    };
-    save_session(&project_id, &session, &messages)
-        .map_err(|e| format!("Failed to save: {}", e))?;
-
-    Ok(assistant_msg)
 }
 
 // ── Project files (scoped to project path) ──
@@ -561,19 +760,20 @@ async fn get_config() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn update_config(key: String, value: String) -> Result<(), String> {
+async fn save_settings(api_key: String, model: String, approval_level: String, max_iterations: i32) -> Result<(), String> {
     let cp = config_path();
     let mut config: serde_json::Value = if cp.exists() {
-        let content = fs::read_to_string(&cp).map_err(|e| format!("Read error: {}", e))?;
-        serde_json::from_str(&content).map_err(|e| format!("Parse error: {}", e))?
+        match fs::read_to_string(&cp) {
+            Ok(c) => serde_json::from_str(&c).unwrap_or(serde_json::json!({})),
+            Err(_) => serde_json::json!({}),
+        }
     } else {
         serde_json::json!({})
     };
-
-    let val: serde_json::Value =
-        serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));
-    config[key] = val;
-
+    config["apiKey"] = serde_json::Value::String(api_key);
+    config["model"] = serde_json::Value::String(model);
+    config["approvalLevel"] = serde_json::Value::String(approval_level);
+    config["maxIterations"] = serde_json::Value::Number(serde_json::Number::from(max_iterations));
     ensure_dir(&nexus_dir()).map_err(|e| format!("Mkdir error: {}", e))?;
     fs::write(&cp, serde_json::to_string_pretty(&config).unwrap_or_default())
         .map_err(|e| format!("Write error: {}", e))?;
@@ -738,7 +938,7 @@ pub fn run() {
             get_session_messages,
             send_message,
             get_config,
-            update_config,
+            save_settings,
             get_cost,
             show_notification,
             open_url,
