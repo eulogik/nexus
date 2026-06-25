@@ -39,6 +39,29 @@ function createDefaultCost(): SessionCost {
   };
 }
 
+function normalizeSession(data: any): Session {
+  const cost = data.cost || {};
+  return {
+    id: data.id || '',
+    name: data.name || 'Session',
+    branch: data.branch || '',
+    createdAt: typeof data.createdAt === 'number' ? data.createdAt : data.created_at ? new Date(data.created_at).getTime() : Date.now(),
+    updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : data.updated_at ? new Date(data.updated_at).getTime() : (typeof data.createdAt === 'number' ? data.createdAt : Date.now()),
+    status: data.status || 'completed',
+    messages: data.messages || [],
+    metadata: data.metadata || { projectPath: '' },
+    cost: {
+      sessionTotal: typeof cost.sessionTotal === 'number' ? cost.sessionTotal : 0,
+      dailyTotal: typeof cost.dailyTotal === 'number' ? cost.dailyTotal : 0,
+      monthlyTotal: typeof cost.monthlyTotal === 'number' ? cost.monthlyTotal : 0,
+      budgetRemaining: typeof cost.budgetRemaining === 'number' ? cost.budgetRemaining : 0,
+      tokensUsed: typeof cost.tokensUsed === 'number' ? cost.tokensUsed : 0,
+      savingsFromCompression: typeof cost.savingsFromCompression === 'number' ? cost.savingsFromCompression : 0,
+      savingsFromFreeModels: typeof cost.savingsFromFreeModels === 'number' ? cost.savingsFromFreeModels : 0,
+    }
+  };
+}
+
 export class SessionManager {
   private sessionsDir: string;
   private sessions: Map<string, Session> = new Map();
@@ -67,7 +90,7 @@ export class SessionManager {
         try {
           const id = file.replace('.json', '');
           const raw = readFileSync(join(this.sessionsDir, file), 'utf-8');
-          const session = JSON.parse(raw) as Session;
+          const session = normalizeSession(JSON.parse(raw));
           this.sessions.set(id, session);
         } catch {
           console.warn(`[SessionManager] Failed to load session file: ${file}`);
@@ -129,7 +152,7 @@ export class SessionManager {
         throw new NexusError(ErrorCode.SESSION_NOT_FOUND, `Session '${id}' not found`);
       }
       const raw = readFileSync(path, 'utf-8');
-      const session = JSON.parse(raw) as Session;
+      const session = normalizeSession(JSON.parse(raw));
       this.sessions.set(id, session);
       return session;
     } catch (error) {

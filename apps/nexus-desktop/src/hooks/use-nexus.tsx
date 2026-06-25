@@ -67,17 +67,20 @@ export function useNexus(projectId: string | null): UseNexusReturn {
 
     listen<{ inputTokens?: number; outputTokens?: number }>('stream-done', (data) => {
       streamDoneRef.current = true;
-      streamingRef.current = '';
-      setState(prev => ({ ...prev, status: 'idle', streamingContent: '' }));
       const sId = activeSessionRef.current;
       if (projectId && sId) {
         invoke<Message[]>('get_session_messages', { projectId, sessionId: sId })
           .then(messages => {
             const filtered = messages.filter(m => m.role === 'user' || m.role === 'assistant');
-            setState(prev => ({ ...prev, messages: filtered }));
+            setState(prev => ({ ...prev, messages: filtered, status: 'idle', streamingContent: '' }));
           })
-          .catch(() => {});
+          .catch(() => {
+            setState(prev => ({ ...prev, status: 'idle', streamingContent: '' }));
+          });
+      } else {
+        setState(prev => ({ ...prev, status: 'idle', streamingContent: '' }));
       }
+      streamingRef.current = '';
     }).then(unlisten => {
       cleanup.push(unlisten);
     });

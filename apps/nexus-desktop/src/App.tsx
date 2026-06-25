@@ -348,6 +348,7 @@ function Sidebar({ projects, activeProject, sessions, activeSessionId, onSelectS
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ backgroundColor: 'var(--nexus-bg-primary)' }}>
+      {/* Project Switcher - always visible if multiple projects */}
       {projects.length > 1 && (
         <div className="flex gap-1 px-3 py-2 border-b flex-wrap items-center" style={{ borderColor: 'var(--nexus-border-primary)' }}>
           {projects.map(p => (
@@ -365,48 +366,49 @@ function Sidebar({ projects, activeProject, sessions, activeSessionId, onSelectS
         </div>
       )}
 
-      {activeProject && (
-        <>
-          <button onClick={() => setSessionsOpen(!sessionsOpen)} className="flex items-center gap-2 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-all" style={{ color: 'var(--nexus-text-secondary)' }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: sessionsOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-            Sessions
-            <span className="ml-auto text-[10px] font-normal px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--nexus-bg-secondary)', color: 'var(--nexus-text-tertiary)' }}>{sessions.length}</span>
-          </button>
-          {sessionsOpen && (
-            <div className="flex-1 overflow-y-auto pb-2">
-              {sessions.map(s => (
-                <div key={s.id} className="flex items-center gap-1 px-2 mx-2 rounded-md cursor-pointer transition-all group" style={{
-                  backgroundColor: activeSessionId === s.id ? 'var(--nexus-bg-elevated)' : 'transparent',
-                  color: activeSessionId === s.id ? 'var(--nexus-text-primary)' : 'var(--nexus-text-secondary)',
-                  padding: '6px 8px',
-                }} onClick={() => onSelectSession(s.id)}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: activeSessionId === s.id ? 'var(--nexus-accent-blue)' : 'var(--nexus-text-tertiary)' }}>
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                  </svg>
-                  <span className="truncate flex-1 text-[11px]">{s.name}</span>
-                  <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id); }} className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  </button>
-                </div>
-              ))}
-              <button onClick={onCreateSession} className="flex items-center gap-1.5 px-4 mx-2 mt-1 text-[11px] rounded-md transition-all" style={{ color: 'var(--nexus-accent-blue)', border: '1px dashed var(--nexus-border-primary)', padding: '5px 8px' }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                New Session
-              </button>
-            </div>
-          )}
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto">
+        {activeProject && (
+          <>
+            <button onClick={() => setSessionsOpen(!sessionsOpen)} className="flex items-center gap-2 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-all w-full" style={{ color: 'var(--nexus-text-secondary)' }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: sessionsOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+              Sessions
+              <span className="ml-auto text-[10px] font-normal px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--nexus-bg-secondary)', color: 'var(--nexus-text-tertiary)' }}>{sessions.length}</span>
+            </button>
+            {sessionsOpen && (
+              <div className="pb-2">
+                {sessions.map(s => (
+                  <div key={s.id} className="flex items-center gap-1 px-2 mx-2 rounded-md cursor-pointer transition-all group" style={{
+                    backgroundColor: activeSessionId === s.id ? 'var(--nexus-bg-elevated)' : 'transparent',
+                    color: activeSessionId === s.id ? 'var(--nexus-text-primary)' : 'var(--nexus-text-secondary)',
+                    padding: '6px 8px',
+                  }} onClick={() => onSelectSession(s.id)}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: activeSessionId === s.id ? 'var(--nexus-accent-blue)' : 'var(--nexus-text-tertiary)' }}>
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span className="truncate flex-1 text-[11px]">{s.name}</span>
+                    <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id); }} className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                ))}
+                <button onClick={onCreateSession} className="flex items-center gap-1.5 px-4 mx-2 mt-1 text-[11px] rounded-md transition-all" style={{ color: 'var(--nexus-accent-blue)', border: '1px dashed var(--nexus-border-primary)', padding: '5px 8px' }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  New Session
+                </button>
+              </div>
+            )}
 
-          <button onClick={() => setFilesOpen(!filesOpen)} className="flex items-center gap-2 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-all" style={{ color: 'var(--nexus-text-secondary)', borderTop: '1px solid var(--nexus-border-primary)' }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: filesOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-            Files
-          </button>
-          {filesOpen && (
-            <div className="flex-1 overflow-y-auto py-1">
-              {activeProject && (
+            <button onClick={() => setFilesOpen(!filesOpen)} className="flex items-center gap-2 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-all w-full" style={{ color: 'var(--nexus-text-secondary)', borderTop: '1px solid var(--nexus-border-primary)' }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: filesOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+              Files
+            </button>
+            {filesOpen && activeProject && (
+              <div className="py-1">
                 <FileTree
                   files={dirContents[''] || []}
                   expanded={expandedDirs}
@@ -416,11 +418,23 @@ function Sidebar({ projects, activeProject, sessions, activeSessionId, onSelectS
                   selectedPath={selectedFile?.path}
                   projectId={activeProject.id}
                 />
-              )}
-            </div>
-          )}
-        </>
-      )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Footer - always visible */}
+      <div className="flex items-center justify-between px-3 py-2 border-t" style={{ borderColor: 'var(--nexus-border-primary)', backgroundColor: 'var(--nexus-bg-primary)' }}>
+        <button onClick={() => onAddProject()} className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md transition-all" style={{ color: 'var(--nexus-accent-blue)', backgroundColor: 'var(--nexus-bg-secondary)', border: '1px solid var(--nexus-border-primary)' }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Project
+        </button>
+        <div className="flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--nexus-accent-green)' }} />
+          <span className="text-[10px]" style={{ color: 'var(--nexus-text-tertiary)' }}>Ready</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -639,6 +653,42 @@ function DiffViewer({ projectPath, onClose }: { projectPath: string; onClose: ()
   );
 }
 
+// ── Onboarding Page ──
+
+function OnboardingPage({ onAddProject }: { onAddProject: () => void }) {
+  return (
+    <div className="flex-1 flex items-center justify-center p-8">
+      <div className="max-w-lg w-full text-center">
+        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6" style={{ background: 'var(--nexus-gradient-primary)', boxShadow: '0 0 40px rgba(92, 124, 250, 0.3)' }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--nexus-text-primary)' }}>Welcome to Nexus</h1>
+        <p className="text-sm mb-8" style={{ color: 'var(--nexus-text-secondary)' }}>Your AI-powered coding assistant. Add a project to get started.</p>
+        <div className="space-y-3">
+          <button onClick={onAddProject} className="w-full rounded-xl px-5 py-4 text-sm font-medium transition-all text-left flex items-center gap-4" style={{ backgroundColor: 'var(--nexus-bg-secondary)', border: '1px solid var(--nexus-border-primary)', color: 'var(--nexus-text-primary)' }}>
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'var(--nexus-accent-blue)' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            </div>
+            <div>
+              <div className="font-medium">Add Local Directory</div>
+              <div className="text-[11px] mt-0.5" style={{ color: 'var(--nexus-text-tertiary)' }}>Select a folder on your machine</div>
+            </div>
+          </button>
+          <div className="rounded-xl px-5 py-4 text-sm flex items-center gap-4" style={{ backgroundColor: 'var(--nexus-bg-secondary)', border: '1px solid var(--nexus-border-primary)', color: 'var(--nexus-text-tertiary)' }}>
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'var(--nexus-bg-tertiary)' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            </div>
+            <div>
+              <div className="font-medium" style={{ color: 'var(--nexus-text-secondary)' }}>Clone Repository</div>
+              <div className="text-[11px] mt-0.5">Coming soon</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──
 
 function App() {
@@ -724,6 +774,36 @@ function App() {
     else if (id === 'settings') setShowSettings(true);
     else if (id === 'close-file') { setSidebarFile(null); setMainView('chat'); }
   };
+
+  // Show onboarding if no projects exist
+  if (projects.length === 0) {
+    return (
+      <div className="h-screen flex flex-col" style={{ backgroundColor: 'var(--nexus-bg-primary)', color: 'var(--nexus-text-primary)' }}>
+        <div className="flex-1 flex">
+          <div className="w-64 flex-shrink-0 border-r flex flex-col" style={{ borderColor: 'var(--nexus-border-primary)', backgroundColor: 'var(--nexus-bg-primary)' }}>
+            <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ borderColor: 'var(--nexus-border-primary)' }}>
+              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: 'var(--nexus-gradient-primary)' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/></svg>
+              </div>
+              <span className="text-xs font-semibold" style={{ color: 'var(--nexus-text-primary)' }}>Nexus</span>
+            </div>
+            <div className="flex-1" />
+            <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--nexus-border-primary)' }}>
+              <button onClick={() => setShowAddProject(true)} className="w-full flex items-center gap-1.5 text-[11px] px-2 py-1.5 rounded-md transition-all" style={{ color: 'var(--nexus-accent-blue)', backgroundColor: 'var(--nexus-bg-secondary)', border: '1px solid var(--nexus-border-primary)' }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Project
+              </button>
+            </div>
+          </div>
+          <OnboardingPage onAddProject={() => setShowAddProject(true)} />
+        </div>
+        <StatusBar status={nexus.status} error={nexus.error} model="gpt-4o-mini" />
+        {showAddProject && <AddProjectModal onAdd={handleAddProject} onClose={() => setShowAddProject(false)} />}
+        {showCommandPalette && <CommandPalette commands={commands} onSelect={handleCommandSelect} onClose={() => setShowCommandPalette(false)} />}
+        <ToastContainer toasts={toasts} onDismiss={removeToast} />
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col" style={{ backgroundColor: 'var(--nexus-bg-primary)', color: 'var(--nexus-text-primary)' }}>

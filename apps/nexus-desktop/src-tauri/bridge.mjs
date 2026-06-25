@@ -5,6 +5,22 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
 
+function collectProjectContext(projectPath) {
+  const contextFiles = ['AGENTS.md', '.cursorrules', 'CLAUDE.md', '.nexus.md'];
+  const parts = [];
+  for (const file of contextFiles) {
+    const filePath = resolve(projectPath, file);
+    if (existsSync(filePath)) {
+      try {
+        const content = readFileSync(filePath, 'utf-8').trim();
+        if (content) parts.push(`<${file}>\n${content}\n</${file}>`);
+      } catch {}
+    }
+  }
+  if (parts.length === 0) return '';
+  return `## Project Configuration\n\n${parts.join('\n\n")}\n\nFollow the above project rules and conventions.\n`;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const args = JSON.parse(process.argv[2]);
 const { sessionId, projectPath, content, apiKey, model, projectId } = args;
@@ -34,6 +50,8 @@ function saveSessionMessages(sessPath, sessionMeta, messages) {
 const SYSTEM_PROMPT = `You are Nexus, a coding agent with file system access. You have tools that the system will execute for you. When you need to perform an action, call the appropriate tool using the function calling interface.
 
 Project directory: ${projectPath}
+
+${collectProjectContext(projectPath)}
 
 CRITICAL RULES:
 1. ALWAYS use tools when the user asks to create, modify, or run something.
@@ -181,8 +199,7 @@ async function main() {
 
     if (toolCalls.length === 0) {
       allMessages.push({ role: 'assistant', content: textContent });
-      const toSave = allMessages.filter(m => m.role !== 'system').map(m => ({ id: randomUUID(), session_id: sessionId, role: m.role, content: m.content || '', timestamp: new Date().toISOString() }));
-      saveSessionMessages(sessionFile, sessionMeta, toSave);
+      saveAllMessages(allMessages, sessionFile, sessionMeta);
       emit('stream-success', { success: true });
       return;
     }
@@ -199,9 +216,23 @@ async function main() {
     }
   }
 
-  const toSave = allMessages.filter(m => m.role !== 'system').map(m => ({ id: randomUUID(), session_id: sessionId, role: m.role, content: m.content || '', timestamp: new Date().toISOString() }));
-  saveSessionMessages(sessionFile, sessionMeta, toSave);
+  saveAllMessages(allMessages, sessionFile, sessionMeta);
   emit('stream-success', { success: true });
+}
+
+function saveAllMessages(allMessages, sessionFile, sessionMeta) {
+  const toSave = allMessages
+    .filter(m => m.role !== 'system')
+    .map(m => ({
+      id: m.id || randomUUID(),
+      session_id: m.session_id || sessionId,
+      role: m.role,
+      content: m.content || '',
+      timestamp: m.timestamp || new Date().toISOString(),
+      tool_calls: m.tool_calls || undefined,
+      tool_call_id: m.tool_call_id || undefined,
+    }));
+  saveSessionMessages(sessionFile, sessionMeta, toSave);
 }
 
 main().catch((err) => { emit('stream-error', { success: false, error: err.message }); process.exit(1); });

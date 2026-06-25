@@ -7,10 +7,12 @@ import type { Session } from 'nexus-core';
 const sessionManager = new SessionManager('.nexus/sessions');
 
 function formatDate(ts: number): string {
+  if (!ts || isNaN(ts)) return 'Unknown';
   return new Date(ts).toLocaleString();
 }
 
 function formatCost(cost: number): string {
+  if (typeof cost !== 'number' || isNaN(cost)) return '$0.000000';
   return `$${cost.toFixed(6)}`;
 }
 
@@ -38,10 +40,10 @@ function sessionList(): void {
   console.log(chalk.dim('  ' + '─'.repeat(100)));
 
   for (const s of sessions) {
-    const id = s.id.slice(0, 36);
-    const name = s.name.slice(0, 28);
-    const status = formatStatus(s.status);
-    const cost = formatCost(s.cost.sessionTotal);
+    const id = (s.id || '').slice(0, 36);
+    const name = (s.name || '').slice(0, 28);
+    const status = formatStatus(s.status || 'completed');
+    const cost = formatCost(s.cost?.sessionTotal ?? 0);
     const date = formatDate(s.updatedAt);
     console.log(`  ${chalk.dim(id)} ${chalk.white(name.padEnd(28))} ${status.padEnd(12)} ${chalk.cyan(cost.padEnd(12))} ${chalk.dim(date)}`);
   }

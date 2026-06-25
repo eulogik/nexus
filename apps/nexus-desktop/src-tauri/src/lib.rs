@@ -856,6 +856,75 @@ async fn get_full_project_diff(project_id: String) -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Git commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn stage_file(project_id: String, file_path: String) -> Result<(), String> {
+    let pf = project_file(&project_id);
+    let content = fs::read_to_string(&pf).map_err(|e| format!("Project not found: {}", e))?;
+    let project: Project = serde_json::from_str(&content).map_err(|e| format!("Parse error: {}", e))?;
+    let output = Command::new("git")
+        .arg("-C").arg(&project.path)
+        .arg("add").arg(&file_path)
+        .output().await.map_err(|e| format!("Git add failed: {}", e))?;
+    if !output.status.success() {
+        return Err(format!("Git add failed: {}", String::from_utf8_lossy(&output.stderr).trim()));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn unstage_file(project_id: String, file_path: String) -> Result<(), String> {
+    let pf = project_file(&project_id);
+    let content = fs::read_to_string(&pf).map_err(|e| format!("Project not found: {}", e))?;
+    let project: Project = serde_json::from_str(&content).map_err(|e| format!("Parse error: {}", e))?;
+    let output = Command::new("git")
+        .arg("-C").arg(&project.path)
+        .arg("reset").arg("HEAD").arg(&file_path)
+        .output().await.map_err(|e| format!("Git reset failed: {}", e))?;
+    if !output.status.success() {
+        return Err(format!("Git reset failed: {}", String::from_utf8_lossy(&output.stderr).trim()));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn discard_changes(project_id: String, file_path: String) -> Result<(), String> {
+    let pf = project_file(&project_id);
+    let content = fs::read_to_string(&pf).map_err(|e| format!("Project not found: {}", e))?;
+    let project: Project = serde_json::from_str(&content).map_err(|e| format!("Parse error: {}", e))?;
+    let output = Command::new("git")
+        .arg("-C").arg(&project.path)
+        .arg("checkout").arg("--").arg(&file_path)
+        .output().await.map_err(|e| format!("Git checkout failed: {}", e))?;
+    if !output.status.success() {
+        return Err(format!("Git checkout failed: {}", String::from_utf8_lossy(&output.stderr).trim()));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_unstaged_files(project_id: String) -> Result<Vec<String>, String> {
+    let pf = project_file(&project_id);
+    let content = fs::read_to_string(&pf).map_err(|e| format!("Project not found: {}", e))?;
+    let project: Project = serde_json::from_str(&content).map_err(|e| format!("Parse error: {}", e))?;
+    let output = Command::new("git")
+        .arg("-C").arg(&project.path)
+        .arg("status").arg("--porcelain")
+        .output().await.map_err(|e| format!("Git status failed: {}", e))?;
+    if !output.status.success() {
+        return Err(format!("Git status failed: {}", String::from_utf8_lossy(&output.stderr).trim()));
+    }
+    let files: Vec<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|l| !l.starts_with("??"))
+        .map(|l| l[3..].trim().to_string())
+        .collect();
+    Ok(files)
+}
+
+// ---------------------------------------------------------------------------
 // System tray
 // ---------------------------------------------------------------------------
 
@@ -946,6 +1015,10 @@ pub fn run() {
             get_full_project_diff,
             list_project_files,
             read_project_file,
+            stage_file,
+            unstage_file,
+            discard_changes,
+            list_unstaged_files,
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {

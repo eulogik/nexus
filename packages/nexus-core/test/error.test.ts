@@ -120,6 +120,7 @@ describe('withRetry', () => {
     const retrySpy = vi.fn();
 
     const promise = withRetry(fn, { maxRetries: 3, onRetry: retrySpy });
+    promise.catch(() => {});
 
     for (let i = 0; i < 3; i++) {
       await vi.runAllTimersAsync();
