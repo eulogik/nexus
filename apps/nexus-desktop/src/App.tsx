@@ -234,9 +234,9 @@ function ChatView({ messages, status, onSend, streamingContent }: {
 
 // ── File Tree ──
 
-function FileTree({ files, expanded, loading, onToggle, onSelect, selectedPath, depth = 0 }: {
+function FileTree({ files, expanded, loading, onToggle, onSelect, selectedPath, depth = 0, projectId }: {
   files: ProjectFile[]; expanded: Set<string>; loading: Set<string>;
-  onToggle: (dir: string) => void; onSelect: (file: ProjectFile) => void; selectedPath?: string; depth?: number;
+  onToggle: (dir: string) => void; onSelect: (file: ProjectFile) => void; selectedPath?: string; depth?: number; projectId?: string;
 }) {
   return (
     <div>
@@ -265,7 +265,7 @@ function FileTree({ files, expanded, loading, onToggle, onSelect, selectedPath, 
             {loading.has(file.path) && <span className="w-2.5 h-2.5 rounded-full animate-spin" style={{ border: '1.5px solid var(--nexus-border-primary)', borderTopColor: 'var(--nexus-accent-blue)' }} />}
           </div>
           {file.is_dir && expanded.has(file.path) && (
-            <FileTreeWrapper dir={file.path} expanded={expanded} loading={loading} onToggle={onToggle} onSelect={onSelect} selectedPath={selectedPath} depth={depth + 1} />
+            <FileTreeWrapper dir={file.path} projectId={projectId || ''} expanded={expanded} loading={loading} onToggle={onToggle} onSelect={onSelect} selectedPath={selectedPath} depth={depth + 1} />
           )}
         </div>
       ))}
@@ -273,19 +273,17 @@ function FileTree({ files, expanded, loading, onToggle, onSelect, selectedPath, 
   );
 }
 
-function FileTreeWrapper({ dir, ...props }: { dir: string } & Omit<React.ComponentProps<typeof FileTree>, 'files'>) {
+function FileTreeWrapper({ dir, projectId, ...props }: { dir: string; projectId: string } & Omit<React.ComponentProps<typeof FileTree>, 'files'>) {
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!isTauri()) return;
-    const projectId = new URLSearchParams(window.location.search).get('projectId');
-    if (!projectId) return;
+    if (!isTauri() || !projectId) { setLoaded(true); return; }
     invoke<FileEntry[]>('list_project_files', { projectId, dir }).then(entries => {
       setFiles(entries.map(e => ({ name: e.name, path: e.path, is_dir: e.is_dir, size: e.size })));
       setLoaded(true);
     }).catch(() => { setFiles([]); setLoaded(true); });
-  }, [dir]);
+  }, [dir, projectId]);
 
   if (!loaded && props.expanded.has(dir)) return <div className="px-4 py-1 text-[10px]" style={{ color: 'var(--nexus-text-tertiary)' }}>Loading...</div>;
   return <FileTree files={files} {...props} />;
@@ -416,6 +414,7 @@ function Sidebar({ projects, activeProject, sessions, activeSessionId, onSelectS
                   onToggle={toggleDir}
                   onSelect={selectFile}
                   selectedPath={selectedFile?.path}
+                  projectId={activeProject.id}
                 />
               )}
             </div>
