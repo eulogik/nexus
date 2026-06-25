@@ -30,8 +30,9 @@ function timeStr(ts: string): string {
 
 // ── Status Bar ──
 
-function StatusBar({ status, error, model }: { status: string; error: string | null; model: string }) {
+function StatusBar({ status, error, model, tokens }: { status: string; error: string | null; model: string; tokens?: { input: number; output: number } }) {
   const statusColor = status === 'streaming' ? 'var(--nexus-accent-blue)' : status === 'error' ? 'var(--nexus-status-error)' : 'var(--nexus-text-tertiary)';
+  const cost = tokens ? ((tokens.input * 0.15 + tokens.output * 0.60) / 1_000_000).toFixed(4) : null;
   return (
     <div className="flex items-center justify-between px-4 py-1.5 text-[11px] border-t" style={{ borderColor: 'var(--nexus-border-primary)', color: 'var(--nexus-text-tertiary)' }}>
       <div className="flex items-center gap-3">
@@ -42,8 +43,8 @@ function StatusBar({ status, error, model }: { status: string; error: string | n
         {error && <span style={{ color: 'var(--nexus-status-error)' }}>{error}</span>}
       </div>
       <div className="flex items-center gap-3">
+        {cost && <span style={{ color: 'var(--nexus-accent-orange)' }}>${cost}</span>}
         <span>{model}</span>
-        <span>Nexus v1.1</span>
       </div>
     </div>
   );
@@ -589,6 +590,56 @@ function ToastContainer({ toasts, onDismiss }: { toasts: { id: string; type: str
   );
 }
 
+// ── Diff Viewer ──
+
+function DiffViewer({ projectPath, onClose }: { projectPath: string; onClose: () => void }) {
+  const [diff, setDiff] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    invoke<string>('get_full_project_diff', { projectId: projectPath }).then(d => {
+      setDiff(d);
+      setLoading(false);
+    }).catch(() => { setDiff('No diff available (not a git repo or no changes)'); setLoading(false); });
+  }, [projectPath]);
+
+  const lines = diff.split('\n');
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: 'var(--nexus-border-primary)' }}>
+        <div className="flex items-center gap-2">
+          <button onClick={onClose} className="text-[11px] flex items-center gap-1" style={{ color: 'var(--nexus-text-tertiary)' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            Back
+          </button>
+          <span className="text-[11px] font-medium" style={{ color: 'var(--nexus-text-secondary)' }}>Project Diff</span>
+        </div>
+        <span className="text-[10px]" style={{ color: 'var(--nexus-text-tertiary)' }}>{lines.length} lines</span>
+      </div>
+      <div className="flex-1 overflow-auto p-4">
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <span className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid var(--nexus-border-primary)', borderTopColor: 'var(--nexus-accent-blue)' }} />
+          </div>
+        ) : (
+          <pre className="text-[11px] font-mono leading-relaxed">
+            {lines.map((line, i) => (
+              <div key={i} className="px-2 -mx-2" style={{
+                backgroundColor: line.startsWith('+') ? 'rgba(63, 185, 80, 0.1)' : line.startsWith('-') ? 'rgba(248, 81, 73, 0.1)' : 'transparent',
+                color: line.startsWith('+') ? 'var(--nexus-accent-green)' : line.startsWith('-') ? 'var(--nexus-accent-red)' : 'var(--nexus-text-secondary)',
+              }}>
+                {line || ' '}
+              </div>
+            ))}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──
 
 function App() {
@@ -596,7 +647,7 @@ function App() {
   const nexus = useNexus(activeProject?.id ?? null);
   const { addToast, toasts, removeToast } = useToast();
 
-  const [mainView, setMainView] = useState<'chat' | 'file'>('chat');
+  const [mainView, setMainView] = useState<'chat' | 'file' | 'diff'>('chat');
   const [sidebarFile, setSidebarFile] = useState<ProjectFile | null>(null);
   const [sidebarFileContent, setSidebarFileContent] = useState<string | null>(null);
   const [showAddProject, setShowAddProject] = useState(false);
@@ -654,6 +705,7 @@ function App() {
   }, [showSettings]);
 
   const [apiKeyStatus, setApiKeyStatus] = useState<'configured' | 'missing'>('missing');
+  const [tokens, setTokens] = useState<{ input: number; output: number }>({ input: 0, output: 0 });
 
   useEffect(() => {
     if (nexus.error) { addToast('error', nexus.error); nexus.clearError(); }
@@ -699,6 +751,10 @@ function App() {
                     Set API Key
                   </button>
                 )}
+                <button onClick={() => setMainView('diff')} className="text-[10px] px-2 py-1 rounded-md flex items-center gap-1" style={{ backgroundColor: mainView === 'diff' ? 'var(--nexus-accent-blue)' : 'var(--nexus-bg-secondary)', color: mainView === 'diff' ? 'white' : 'var(--nexus-text-tertiary)', border: '1px solid ' + (mainView === 'diff' ? 'var(--nexus-accent-blue)' : 'var(--nexus-border-primary)') }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v18"/><rect x="3" y="8" width="7" height="8"/><rect x="14" y="8" width="7" height="8"/></svg>
+                  Diff
+                </button>
                 <button onClick={() => setShowCommandPalette(true)} className="text-[10px] px-2 py-1 rounded-md flex items-center gap-1" style={{ backgroundColor: 'var(--nexus-bg-secondary)', border: '1px solid var(--nexus-border-primary)', color: 'var(--nexus-text-tertiary)' }}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   ⌘K
@@ -708,7 +764,9 @@ function App() {
           )}
 
           <div className="flex-1 overflow-hidden">
-            {mainView === 'chat' || !sidebarFile ? (
+            {mainView === 'diff' && activeProject ? (
+              <DiffViewer projectPath={activeProject.id} onClose={() => setMainView('chat')} />
+            ) : mainView === 'chat' || !sidebarFile ? (
               <ChatView messages={nexus.messages} status={nexus.status} onSend={nexus.sendMessage} streamingContent={nexus.streamingContent} />
             ) : (
               <div className="h-full flex flex-col">

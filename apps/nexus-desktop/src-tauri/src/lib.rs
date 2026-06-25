@@ -466,7 +466,7 @@ async fn call_bridge_stream(
                         let _ = app.emit("approval-needed", &evt["data"]);
                     }
                     Some("stream-success") => {
-                        let _ = app.emit("stream-done", &evt["data"]);
+                        let _ = app.emit("stream-done", &true);
                     }
                     Some("stream-error") => {
                         let _ = app.emit("stream-error", &evt["data"]);

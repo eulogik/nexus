@@ -65,7 +65,7 @@ export function useNexus(projectId: string | null): UseNexusReturn {
       cleanup.push(unlisten);
     });
 
-    listen('stream-done', () => {
+    listen<{ inputTokens?: number; outputTokens?: number }>('stream-done', (data) => {
       streamDoneRef.current = true;
       streamingRef.current = '';
       setState(prev => ({ ...prev, status: 'idle', streamingContent: '' }));

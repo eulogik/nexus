@@ -295,6 +295,8 @@ async function main() {
   const allMessages = [...messages];
   const savedMessages = existingMessages.slice();
   const MAX_ITERATIONS = 50;
+  let inputTokens = messages.reduce((sum, m) => sum + Math.ceil((m.content || '').length / 4), 0);
+  let outputTokens = 0;
 
   for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
     const res = await callLLM(allMessages, modelUsed);
@@ -310,6 +312,7 @@ async function main() {
       const delta = choice.delta;
       if (delta?.content) {
         textContent += delta.content;
+        outputTokens += Math.ceil(delta.content.length / 4);
         for (const ch of delta.content) emit('stream-token', ch);
       }
 
@@ -368,7 +371,7 @@ async function main() {
       timestamp: new Date().toISOString(),
     }));
   saveSessionMessages(sessionFile, sessionMeta, finalMessages);
-  emit('stream-success', { success: true });
+  emit('stream-success', { success: true, inputTokens: inputTokens, outputTokens: outputTokens });
 }
 
 main().catch((err) => {
