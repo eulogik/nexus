@@ -19,7 +19,18 @@
 
 **An AI coding agent that runs on your machine, connects to 300+ LLMs, and actually writes code — not just chat about it. Built with Rust + TypeScript. 100% open source.**
 
-[Install](#installation) · [Quick Start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [Plugins](#plugins) · [Docs](./docs) · [Discord](https://discord.gg/nexus)
+<!-- Open Graph / Social Sharing -->
+<meta property="og:title" content="Nexus — AI Coding Agent Desktop App" />
+<meta property="og:description" content="Free, local, open source. An AI coding agent that actually builds things — not just chat about them." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://github.com/eulogik/nexus" />
+<meta property="og:image" content="https://raw.githubusercontent.com/eulogik/nexus/main/docs/screenshots/og-image.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Nexus — AI Coding Agent Desktop App" />
+<meta name="twitter:description" content="Free, local, open source. An AI coding agent that actually builds things." />
+<meta name="keywords" content="AI coding agent, LLM, open source, developer tools, Rust, TypeScript, Tauri, OpenRouter, Claude Code alternative, Cursor alternative, Copilot alternative, Devin alternative, Bolt.new alternative, SWE-agent, code generation" />
+
+[Install](#installation) · [Quick Start](#quick start) · [What Can Nexus Do?](#what-can-nexus-do) · [Features](#features) · [Architecture](#architecture) · [Plugins](#plugins) · [Docs](./docs) · [Discord](https://discord.gg/nexus) · [Blog](https://nexus.ai/blog)
 
 </div>
 

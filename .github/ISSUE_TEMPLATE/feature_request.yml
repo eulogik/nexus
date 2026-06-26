@@ -1,0 +1,47 @@
+---
+name: Feature Request
+description: Suggest an idea or new feature
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature!
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the problem you're facing
+      placeholder: "I'm always frustrated when [...]"
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What solution would you like?
+      description: Describe what you want to happen
+      placeholder: "It would be great if [...]"
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative solutions you've considered?
+      placeholder: "I've tried [...]"
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which component is this for?
+      options:
+        - Desktop App (UI/UX)
+        - Desktop App (Backend/Rust)
+        - CLI
+        - Agent Loop / Tools
+        - LLM Providers
+        - Plugin System
+        - Documentation
+        - Other
+    validations:
+      required: true
