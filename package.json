@@ -1,16 +1,73 @@
 {
   "name": "nexus",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Universal Coding Agent Harness — Zero Cost. Zero Dependencies. 100% Control.",
+  "description": "Nexus — AI Coding Agent Desktop App. Free, local, open source. Actually builds things.",
+  "author": {
+    "name": "Eulogik",
+    "email": "team@nexus.ai",
+    "url": "https://github.com/eulogik"
+  },
+  "license": "MIT",
+  "homepage": "https://nexus.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eulogik/nexus.git",
+    "directory": "."
+  },
+  "bugs": {
+    "url": "https://github.com/eulogik/nexus/issues"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "llm",
+    "open-source",
+    "desktop-app",
+    "tauri",
+    "rust",
+    "typescript",
+    "openrouter",
+    "gpt",
+    "claude",
+    "gemini",
+    "copilot-alternative",
+    "cursor-alternative",
+    "claude-code-alternative",
+    "developer-tools",
+    "productivity",
+    "agentic",
+    "agent-loop",
+    "mcp",
+    "model-context-protocol",
+    "git",
+    "automation",
+    "code-generation",
+    "code-review",
+    "devin-alternative",
+    "bolt-alternative",
+    "lovable-alternative",
+    "v0-alternative",
+    "swe-bench",
+    "swe-agent"
+  ],
+  "categories": [
+    "Developer Tools",
+    "Productivity",
+    "Artificial Intelligence"
+  ],
   "packageManager": "pnpm@9.15.4",
   "engines": {
-    "node": ">=20.18.0"
+    "node": ">=20.18.0",
+    "pnpm": ">=9.0.0"
   },
   "scripts": {
     "build": "turbo run build",
     "build:cli": "turbo run build --filter=nexus-cli",
+    "build:desktop": "pnpm --filter nexus-desktop tauri build",
     "dev": "turbo run dev --parallel",
+    "dev:desktop": "pnpm --filter nexus-desktop tauri dev",
+    "dev:cli": "pnpm --filter nexus-cli dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -19,7 +76,8 @@
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
     "clean": "turbo run clean && rm -rf node_modules .turbo",
-    "benchmark": "tsx scripts/benchmark.ts",
+    "release:desktop": "pnpm --filter nexus-desktop tauri build",
+    "release:npm": "pnpm publish --filter=nexus-ai --filter=nexus-core --filter=nexus-sdk",
     "release": "tsx scripts/release.ts",
     "doctor": "tsx apps/nexus-cli/src/index.ts doctor",
     "nexus": "tsx apps/nexus-cli/src/index.ts"
