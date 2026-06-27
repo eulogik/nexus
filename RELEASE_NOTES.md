@@ -94,11 +94,9 @@ Beautiful first-time user experience:
 
 ## 🔗 Links
 
-- **Website**: https://nexus.ai
-- **Documentation**: https://docs.nexus.ai
-- **Discord**: https://discord.gg/nexus
-- **Twitter**: https://twitter.com/nexus_ai
-- **Blog**: https://nexus.ai/blog
+- **GitHub**: https://github.com/eulogik/nexus
+- **Discussions**: https://github.com/eulogik/nexus/discussions
+- **Releases**: https://github.com/eulogik/nexus/releases
 
 ---
 

@@ -5,11 +5,9 @@
   "description": "Nexus — AI Coding Agent Desktop App. Free, local, open source. Actually builds things.",
   "author": {
     "name": "Eulogik",
-    "email": "team@nexus.ai",
     "url": "https://github.com/eulogik"
   },
   "license": "MIT",
-  "homepage": "https://nexus.ai",
   "repository": {
     "type": "git",
     "url": "https://github.com/eulogik/nexus.git",

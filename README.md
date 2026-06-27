@@ -7,7 +7,7 @@
 
 # **Nexus** — AI Coding Agent Desktop App
 
-### Free. Local. Open Source. The coding agent that actually builds things.
+### By [Eulogik](https://github.com/eulogik) · Free. Local. Open Source. The coding agent that actually builds things.
 
 [![Tests](https://img.shields.io/badge/tests-571%20passing-brightgreen?style=flat-square&logo=vitest)](./test)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict%20mode-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
@@ -30,7 +30,7 @@
 <meta name="twitter:description" content="Free, local, open source. An AI coding agent that actually builds things." />
 <meta name="keywords" content="AI coding agent, LLM, open source, developer tools, Rust, TypeScript, Tauri, OpenRouter, Claude Code alternative, Cursor alternative, Copilot alternative, Devin alternative, Bolt.new alternative, SWE-agent, code generation" />
 
-[Install](#installation) · [Quick Start](#quick start) · [What Can Nexus Do?](#what-can-nexus-do) · [Features](#features) · [Architecture](#architecture) · [Plugins](#plugins) · [Docs](./docs) · [Discord](https://discord.gg/nexus) · [Blog](https://nexus.ai/blog)
+[Install](#installation) · [Quick Start](#quick-start) · [What Can Nexus Do?](#what-can-nexus-do) · [Features](#features) · [Architecture](#architecture) · [Plugins](#plugins) · [Docs](./docs)
 
 </div>
 
@@ -332,16 +332,10 @@ nexus/
 
 ## Links
 
-- **[Official Website](https://nexus.ai)** — Product info & pricing
-- **[Documentation](https://docs.nexus.ai)** — Full guides & API reference
-- **[Discord Community](https://discord.gg/nexus)** — Get help & share ideas
-- **[Twitter/X](https://twitter.com/nexus_ai)** — Updates & announcements
-- **[YouTube](https://youtube.com/@nexus-ai)** — Tutorials & demos
-- **[Blog](https://nexus.ai/blog)** — Engineering deep-dives
-- **[Changelog](https://github.com/eulogik/nexus/releases)** | See what's new
-- **[Roadmap](https://github.com/eulogik/nexus/projects)** | What we're building
-- **[Discussions](https://github.com/eulogik/nexus/discussions)** | Community Q&A
-- **[Wiki](https://github.com/eulogik/nexus/wiki)** | Additional resources
+- **[GitHub Discussions](https://github.com/eulogik/nexus/discussions)** — Community Q&A
+- **[GitHub Wiki](https://github.com/eulogik/nexus/wiki)** — Additional resources
+- **[Changelog](https://github.com/eulogik/nexus/releases)** — See what's new
+- **[Roadmap](https://github.com/eulogik/nexus/projects)** — What we're building
 
 ---
 
@@ -429,6 +423,6 @@ MIT © [Eulogik](https://github.com/eulogik)
 
 Made with ❤️ by the [Eulogik](https://github.com/eulogik) team
 
-[Website](https://nexus.ai) · [Twitter](https://twitter.com/nexus_ai) · [Discord](https://discord.gg/nexus) · [Blog](https://nexus.ai/blog) · [Careers](https://nexus.ai/careers)
+[GitHub](https://github.com/eulogik/nexus) · [Discussions](https://github.com/eulogik/nexus/discussions) · [Releases](https://github.com/eulogik/nexus/releases)
 
 </div>
