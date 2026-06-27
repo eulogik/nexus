@@ -332,10 +332,8 @@ nexus/
 
 ## Links
 
-- **[GitHub Discussions](https://github.com/eulogik/nexus/discussions)** — Community Q&A
-- **[GitHub Wiki](https://github.com/eulogik/nexus/wiki)** — Additional resources
-- **[Changelog](https://github.com/eulogik/nexus/releases)** — See what's new
-- **[Roadmap](https://github.com/eulogik/nexus/projects)** — What we're building
+- **[Releases](https://github.com/eulogik/nexus/releases)** — See what's new
+- **[Projects](https://github.com/eulogik/nexus/projects)** — What we're building
 
 ---
 
@@ -419,10 +417,10 @@ MIT © [Eulogik](https://github.com/eulogik)
 
 [![GitHub stars](https://img.shields.io/github/stars/eulogik/nexus?style=social)](https://github.com/eulogik/nexus/stargazers)
 
-[Report Bug](https://github.com/eulogik/nexus/issues) · [Request Feature](https://github.com/eulogik/nexus/issues) · [Discussions](https://github.com/eulogik/nexus/discussions) · [Docs](https://github.com/eulogik/nexus/wiki)
+[Report Bug](https://github.com/eulogik/nexus/issues) · [Request Feature](https://github.com/eulogik/nexus/issues)
 
 Made with ❤️ by the [Eulogik](https://github.com/eulogik) team
 
-[GitHub](https://github.com/eulogik/nexus) · [Discussions](https://github.com/eulogik/nexus/discussions) · [Releases](https://github.com/eulogik/nexus/releases)
+[GitHub](https://github.com/eulogik/nexus) · [Releases](https://github.com/eulogik/nexus/releases)
 
 </div>
